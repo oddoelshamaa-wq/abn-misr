@@ -2063,10 +2063,21 @@
                                 radarFilter.value = currentVal;
                             }
 
-                            // 6. تحديث قائمة الرتب
-                            const rh = Object.keys(systemSettingsCache.custom_ranks || {}).map(r => `<option value="${r}">${r}</option>`).join('');
-                            if(document.getElementById('adm-rank-matrix-sel')) document.getElementById('adm-rank-matrix-sel').innerHTML = `<option value="">-- اختر --</option>` + rh;
-                            if(document.getElementById('reg-user-rank-sel-core')) document.getElementById('reg-user-rank-sel-core').innerHTML = rh;
+                            // تحديث قائمة الرتب
+                            const ranksObj = systemSettingsCache.custom_ranks || {};
+                            const ranksHtml = Object.keys(ranksObj).map(r => `<option value="${r}">${r}</option>`).join('');
+                            
+                            // وضع الرتب في القائمة المنسدلة للإدارة
+                            const rankSelect = document.getElementById('adm-rank-matrix-sel');
+                            if (rankSelect) {
+                                rankSelect.innerHTML = `<option value="">-- اختر الرتبة للتعديل --</option>` + ranksHtml;
+                            }
+
+                            // وضع الرتب في قائمة تسجيل عضو جديد
+                            const regRankSelect = document.getElementById('reg-user-rank-sel-core');
+                            if (regRankSelect) {
+                                regRankSelect.innerHTML = ranksHtml;
+                            }
 
                             // 7. تحديث قائمة الفروع في السجل
                             updateLogBranchDropdown();

@@ -1837,13 +1837,23 @@
                                 console.log("تم تحميل الإعدادات والفروع");
                             });
 
+                            // مراقبة الصلاحيات من السيرفر حياً
+                            dbHub.ref('settings/permissions').on('value', snap => {
+                                const allPermissions = snap.val() || {};
+                                systemSettingsCache.permissions = allPermissions;
+
+                                // إعادة تشغيل "درع الحماية" لتطبيق الصلاحيات الجديدة فوراً
+                                runPermissionShieldCheck();
+                                console.log("تم تحديث درع الصلاحيات من السيرفر");
+                            });
+
                             // مراقبة الشكاوى (العمليات)
                             dbHub.ref('operations').on('value', snap => {
                                 const newOperations = snap.val() || {};
                                 complaintsCache = newOperations;
-                                
+
                                 console.log("وصلت شكاوى جديدة من السيرفر عددها: " + Object.keys(newOperations).length);
-                                
+
                                 // رسم الشكاوى في الشاشة فوراً
                                 renderLiveBroadcastMatrix();
                                 runArchiveRefreshSequence();
@@ -2044,104 +2054,80 @@
                             const to = document.getElementById('reports-date-to').value;
                             if (!from || !to) return;
 
-                            // --- [بداية تعديل العزل] ---
-                            let branchesToProcess = [];
-                            // إذا كان سوبر أدمن يرى كل الفروع، غير ذلك يرى فرعه المخصص فقط
-                            if (currentUserSession.role === 'SUPER' || currentUserSession.branch === 'ALL') {
-                                branchesToProcess = branchListCache;
-                            } else {
-                                branchesToProcess = [currentUserSession.branch];
-                            }
-                            // --- [نهاية تعديل العزل] ---
+                            // --- العزل التام للفروع ---
+                            let branchesToProcess = (currentUserSession.role === 'SUPER' || currentUserSession.branch === 'ALL') 
+                                                    ? branchListCache 
+                                                    : [currentUserSession.branch];
 
-                            // 1. جلب البيانات من السحاب
                             const dSnap = await dbHub.ref('daily_stats').get();
                             const allOrders = dSnap.val() || {};
-                            // فتلرة الشكاوى لتشمل فقط الفروع المسموح بها للمستخدم
-                            const ops = Object.values(complaintsCache).filter(o =>
-                                o.date >= from &&
-                                o.date <= to &&
-                                branchesToProcess.includes(o.branch)
+                            const ops = Object.values(complaintsCache).filter(o => 
+                                o.date >= from && o.date <= to && branchesToProcess.includes(o.branch)
                             );
 
                             const types = ["تأخير", "سوء خدمه", "ناقص", "سوء تعبئه", "خطأ فى الطلب", "خطأ فى الباقى", "جوده", "جسم غريب", "سوء سلوك", "مندوب", "طلب بارد", "رسبي", "تأخير شكوي", "تواصل من الفرع", "سوشيال"];
 
-                            // بناء الجدول الأول (المصفوفة)
+                            // بناء الهيدر مع العمود الجديد
                             let table1Html = `<table class="premium-matrix">
                                 <thead>
                                     <tr>
                                         <th>المطعم</th>
                                         ${types.map(t => `<th>${t}</th>`).join('')}
                                         <th class="col-total-blue">اجمالي TA</th>
+                                        <th class="col-total-blue" style="background:#1e3a8a !important;">الاجمالي Din In</th>
                                         <th class="col-total-blue">الاجمالي HD</th>
                                         <th class="col-total-blue">اجمالي المطعم</th>
                                     </tr>
                                 </thead><tbody>`;
 
-                            let grandTotals = Array(types.length + 3).fill(0);
+                            let grandTotals = Array(types.length + 4).fill(0); // زيادة المصفوفة لـ 4 أعمدة إجمالية
                             let branchStats = [];
 
-                            // نستخدم هنا branchesToProcess بدلاً من القائمة الكاملة
                             branchesToProcess.forEach(br => {
                                 let brOps = ops.filter(o => o.branch === br);
                                 let counts = types.map(t => brOps.filter(o => o.type === t).length);
 
-                                let taTotal = counts[13] + counts[14];
+                                // حسابات الإجماليات
+                                let taTotal = counts[13] + counts[14]; // تواصل من الفرع + سوشيال
+                                let dinInTotal = 0; // يمكنك وضع منطق هنا إذا كان هناك نوع شكوى محدد للـ Din in
                                 let restaurantTotal = brOps.length;
-                                let hdTotal = restaurantTotal - taTotal;
+                                let hdTotal = restaurantTotal - taTotal - dinInTotal;
 
                                 table1Html += `<tr>
                                     <td style="background:#1e293b; color:#fbbf24; font-weight:bold;">${br}</td>
                                     ${counts.map(c => `<td>${c}</td>`).join('')}
                                     <td class="col-subtotal-light">${taTotal}</td>
+                                    <td class="col-subtotal-light" style="color:#10b981;">${dinInTotal}</td>
                                     <td class="col-subtotal-light">${hdTotal}</td>
                                     <td style="background:rgba(255,255,255,0.05)">${restaurantTotal}</td>
                                 </tr>`;
 
+                                // تجميع الإجماليات النهائية للسفل
+                                counts.forEach((c, i) => grandTotals[i] += c);
+                                grandTotals[types.length] += taTotal;
+                                grandTotals[types.length + 1] += dinInTotal;
+                                grandTotals[types.length + 2] += hdTotal;
+                                grandTotals[types.length + 3] += restaurantTotal;
+
+                                // للجدول الصغير
                                 let brOrders = 0;
                                 Object.keys(allOrders).forEach(d => { if(d >= from && d <= to) brOrders += parseInt(allOrders[d][br] || 0); });
                                 branchStats.push({ name: br, orders: brOrders, comps: restaurantTotal });
-
-                                counts.forEach((c, i) => grandTotals[i] += c);
-                                grandTotals[types.length] += taTotal;
-                                grandTotals[types.length + 1] += hdTotal;
-                                grandTotals[types.length + 2] += restaurantTotal;
                             });
 
-                            // سطر الإجمالي سيظهر إجمالي ما يراه المستخدم فقط (فرعه فقط أو الكل)
                             table1Html += `<tr style="background:#1e40af; color:white; font-weight:900;">
                                 <td>الاجمالي</td>${grandTotals.map(gt => `<td>${gt}</td>`).join('')}
                             </tr></tbody></table>`;
+                            
                             document.getElementById('matrix-report-table-container').innerHTML = table1Html;
 
-                            // بناء الجدول الثاني (ملخص النسب)
-                            let table2Html = `<table class="premium-matrix">
-                                <thead>
-                                    <tr><th>المطعم</th><th>العمليات</th><th>الشكاوى</th><th>النسبة</th></tr>
-                                </thead><tbody>`;
-
-                            let totalOrdersAll = 0, totalCompsAll = 0;
-                            branchStats.forEach(s => {
-                                let perc = s.orders > 0 ? ((s.comps/s.orders)*100).toFixed(2) : 0;
-                                table2Html += `<tr>
-                                    <td>${s.name}</td>
-                                    <td>${s.orders}</td>
-                                    <td>${s.comps}</td>
-                                    <td style="color:#fbbf24; font-weight:bold;">${perc}%</td>
-                                </tr>`;
-                                totalOrdersAll += s.orders; totalCompsAll += s.comps;
-                            });
-
-                            let finalPercAll = totalOrdersAll > 0 ? ((totalCompsAll/totalOrdersAll)*100).toFixed(2) : 0;
-                            table2Html += `<tr style="background:#1e40af; color:white;">
-                                <td>الاجمالي</td><td>${totalOrdersAll}</td><td>${totalCompsAll}</td><td>${finalPercAll}%</td>
-                            </tr></tbody></table>`;
-                            document.getElementById('summary-percentage-table-container').innerHTML = table2Html;
-
-                            // تحديث الرسوم البيانية والكروت (ستعتمد تلقائياً على البيانات المفلترة أعلاه)
+                            // تحديث باقي الرسوم والـ KPIs كما هي
                             renderPremiumBarChart(branchStats);
                             renderComplaintTypesPieChart(ops);
-                            updateKPIs(totalOrdersAll, totalCompsAll, finalPercAll);
+                            updateKPIs(0, grandTotals[grandTotals.length-1], 0); // تحديث الإجمالي الكلي فقط
+                            
+                            // (ملاحظة: تأكد من استدعاء الجدول الصغير أيضاً إذا كنت تستخدمه)
+                            renderSmallStatsTable(branchStats); 
                         }
 
                         function renderPremiumBarChart(stats) {
@@ -2484,7 +2470,7 @@
                             const complaintTypes = ["تأخير", "سوء خدمه", "ناقص", "سوء تعبئه", "خطأ فى الطلب", "خطأ فى الباقى", "جوده", "جسم غريب", "سوء سلوك", "مندوب", "طلب بارد", "رسبي", "تأخير شكوي", "تواصل من الفرع", "سوشيال"];
 
                             // 3. بناء الجدول الكبير (الأزرق)
-                            const headerRow1 = ["المطعم", ...complaintTypes, "اجمالي TA", "الاجمالي PK", "الاجمالي Din In", "الاجمالي HD", "اجمالي المطعم"];
+                            const headerRow1 = ["المطعم", ...complaintTypes, "اجمالي TA", "الاجمالي Din In", "الاجمالي HD", "اجمالي المطعم"];
                             const headerRow = worksheet.addRow(headerRow1);
 
                             // تنسيق هيدر الجدول (لون أزرق غامق وخط أبيض)
@@ -2502,12 +2488,13 @@
                                 const getC = (t) => brOps.filter(o => o.type === t).length;
 
                                 const taTotal = getC("سوشيال") + getC("تواصل من الفرع");
+                                const dinInTotal = 0; // يمكنك وضع منطق هنا إذا كان هناك نوع شكوى محدد للـ Din in
                                 const restaurantTotal = brOps.length;
-                                const hdTotal = restaurantTotal - taTotal;
+                                const hdTotal = restaurantTotal - taTotal - dinInTotal;
 
                                 const rowData = [br];
                                 complaintTypes.forEach(t => rowData.push(getC(t)));
-                                rowData.push(taTotal, 0, 0, hdTotal, restaurantTotal);
+                                rowData.push(taTotal, dinInTotal, hdTotal, restaurantTotal);
 
                                 const row = worksheet.addRow(rowData);
                                 row.eachCell(cell => {
@@ -2794,21 +2781,45 @@
                             localStorage.setItem('whatsapp_' + br, JSON.stringify(phones));
                             renderBranchWhatsappList();
                         }
-                        function loadRankPermissionsMatrixHub() {
-                            const r = document.getElementById('adm-rank-matrix-sel').value;
-                            if(!r) { document.getElementById('adm-permissions-grid-hub').classList.add('hidden'); return; }
+                        async function loadRankPermissionsMatrixHub() {
+                            const rank = document.getElementById('adm-rank-matrix-sel').value;
+                            if (!rank) {
+                                document.getElementById('adm-permissions-grid-hub').classList.add('hidden');
+                                return;
+                            }
+
                             document.getElementById('adm-permissions-grid-hub').classList.remove('hidden');
-                            const permissions = JSON.parse(localStorage.getItem('permissions') || '{}');
-                            const p = permissions[r] || {};
-                            ['view_all','create_ticket','reply_ticket','daily_edit','admin_access'].forEach(k => document.getElementById('perm-'+k.replace('_','-')).checked = p[k]||false);
+
+                            // جلب البيانات من السيرفر أو الكاش
+                            const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[rank]) ? systemSettingsCache.permissions[rank] : {};
+
+                            // ضبط الـ Checkboxes
+                            document.getElementById('perm-view-all').checked = p.view_all || false;
+                            document.getElementById('perm-create-ticket').checked = p.create_ticket || false;
+                            document.getElementById('perm-reply-ticket').checked = p.reply_ticket || false;
+                            document.getElementById('perm-daily-edit').checked = p.daily_edit || false;
+                            document.getElementById('perm-admin-access').checked = p.admin_access || false;
                         }
-                        function saveRankPermissionsSequence() {
-                            const r = document.getElementById('adm-rank-matrix-sel').value;
-                            const d = {}; ['view_all','create_ticket','reply_ticket','daily_edit','admin_access'].forEach(k => d[k] = document.getElementById('perm-'+k.replace('_','-')).checked);
-                            const permissions = JSON.parse(localStorage.getItem('permissions') || '{}');
-                            permissions[r] = d;
-                            localStorage.setItem('permissions', JSON.stringify(permissions));
-                            renderSystemToast("تم التحديث","success");
+                        async function saveRankPermissionsSequence() {
+                            const rank = document.getElementById('adm-rank-matrix-sel').value;
+                            if (!rank) return;
+
+                            // تجميع القيم من الـ Checkboxes
+                            const perms = {
+                                view_all: document.getElementById('perm-view-all').checked,
+                                create_ticket: document.getElementById('perm-create-ticket').checked,
+                                reply_ticket: document.getElementById('perm-reply-ticket').checked,
+                                daily_edit: document.getElementById('perm-daily-edit').checked,
+                                admin_access: document.getElementById('perm-admin-access').checked
+                            };
+
+                            try {
+                                // الحفظ في Firebase تحت نود settings/permissions
+                                await dbHub.ref('settings/permissions/' + rank).set(perms);
+                                renderSystemToast("تم تثبيت صلاحيات " + rank + " بنجاح", "success");
+                            } catch (e) {
+                                renderSystemToast("فشل الحفظ في السيرفر", "danger");
+                            }
                         }
                         function renderAdminUsersScrollBox() {
                             const b = document.getElementById('adm-users-scroll-box');
@@ -2965,22 +2976,37 @@
                             }
                         }
                     function runPermissionShieldCheck() {
-                        const p = systemSettingsCache.permissions ? (systemSettingsCache.permissions[currentUserSession.title] || {}) : {};
+                        if (!currentUserSession) return;
 
-                        // 1. حماية تبويب الإدارة: للسوبر أدمن فقط
-                        if (currentUserSession.role === 'SUPER') {
-                            document.getElementById('tab-admin').classList.remove('hidden');
-                        } else {
-                            document.getElementById('tab-admin').classList.add('hidden');
-                            // إذا حاول مستخدم عادي الدخول للموديول يدوياً نرجعه للبث الحي
-                            if (document.getElementById('tab-admin').classList.contains('active')) {
-                                switchToAppModule('live');
-                            }
+                        // 1. جلب صلاحيات الرتبة الخاصة بالموظف الحالي
+                        const userRank = currentUserSession.title;
+                        const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[userRank]) ? systemSettingsCache.permissions[userRank] : {};
+
+                        // 2. صلاحية دخول الإدارة (تظهر للسوبر أدمن أو من لديه صلاحية admin_access)
+                        const isAdmin = currentUserSession.role === 'SUPER' || p.admin_access === true;
+                        const adminTab = document.getElementById('tab-admin');
+                        if (adminTab) {
+                            if (isAdmin) adminTab.classList.remove('hidden');
+                            else adminTab.classList.add('hidden');
                         }
 
-                        // 2. صلاحية إنشاء بلاغ (للدسبتشر أو السوبر أو من لديه صلاحية)
-                        const canCreate = p.create_ticket || currentUserSession.role === 'SUPER' || currentUserSession.title === 'ديسبتشر';
-                        document.getElementById('floating-plus-btn').className = canCreate ? 'floating-action-master' : 'hidden';
+                        // 3. صلاحية إنشاء بلاغ (الزر العائم +)
+                        const canCreate = currentUserSession.role === 'SUPER' || p.create_ticket === true;
+                        const floatBtn = document.getElementById('floating-plus-btn');
+                        if (floatBtn) {
+                            if (canCreate) floatBtn.classList.remove('hidden');
+                            else floatBtn.classList.add('hidden');
+                        }
+
+                        // 4. التحكم في التبويبات الأخرى (اليومية والتقارير)
+                        const canViewDaily = currentUserSession.role === 'SUPER' || p.daily_edit === true;
+                        const dailyTab = document.getElementById('tab-daily');
+                        if (dailyTab) {
+                            if (canViewDaily) dailyTab.classList.remove('hidden');
+                            else dailyTab.classList.add('hidden');
+                        }
+
+                        // ملاحطة: صلاحيات (view_all) و (reply_ticket) مطبقة فعلياً داخل دوال الـ Render والـ Modals
                     }
 
                     // Helpers

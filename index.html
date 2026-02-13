@@ -1292,18 +1292,18 @@
                                 <div class="admin-layout-flex">
                                     <div class="massive-glass-card" style="padding:80px;">
                                         <h3 style="color:var(--gold-master); margin-bottom:60px;">التحكم بالفروع</h3>
-                                        ${currentUserSession.role === 'SUPER' ? `
+                                       
                                         <div style="display:flex; gap:25px; margin-bottom:40px;">
                                             <input id="adm-branch-name-input" placeholder="اسم الفرع">
                                             <button class="btn-vip-execute-master" style="width:180px;" onclick="addSystemBranchCore()">إدراج</button>
                                         </div>
-                                        ` : ''}
+                                        
                                         <div id="adm-branches-scroll-box" class="scrollable-admin-list"></div>
                                         <hr style="margin:50px 0; border-color:var(--border-glow-line);">
                                         <h3 style="color:var(--gold-master); margin-bottom:40px;">واتساب الإشعارات</h3>
-                                        ${currentUserSession.role === 'SUPER' ? `
+                                
                                         <select id="adm-whatsapp-br-sel" onchange="renderBranchWhatsappList()"></select>
-                                        ` : `<div style="font-weight:600; color:var(--gold-master); margin-bottom:10px;">فرع: ${currentUserSession.branch}</div>`}
+                                        <div style="font-weight:600; color:var(--gold-master); margin-bottom:10px;">فرع: </div>
                                         <div style="display:flex; gap:25px;">
                                             <input id="adm-whatsapp-phone-input" placeholder="رقم الهاتف">
                                             <button class="btn-vip-execute-master" style="width:180px;" onclick="bindNewWhatsappToBranch()">+ ربط</button>

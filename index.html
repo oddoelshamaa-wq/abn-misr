@@ -1681,6 +1681,20 @@
                             applyLogsFilter(); // تحديث الجدول بعد المسح
                         }
 
+                        function loadLogsFromFirebase() {
+                            dbHub.ref('access_logs').limitToLast(100).on('value', snap => {
+                                const logs = snap.val();
+                                allAccessLogsCache = [];
+                                if (logs) {
+                                    Object.keys(logs).forEach(key => {
+                                        allAccessLogsCache.push({ id: key, ...logs[key] });
+                                    });
+                                    allAccessLogsCache.reverse(); // الأحدث فوق
+                                    applyLogsFilter(); // عرضهم في الجدول
+                                }
+                            });
+                        }
+
                         // === وظيفة بروفايل الموظف (عرض التايم لاين الخاص به) ===
                         async function viewUserProfileActivity(uid, userName) {
                             // إظهار رسالة جاري التحميل
@@ -2661,35 +2675,40 @@
 
                         // Admin Utilities
                         function syncUiDropdownSelections() {
-                            const branchFilter = document.getElementById('global-branch-filter');
-                            const branchSelect = document.getElementById('f-branch-master-sel');
+                            // 1. تجهيز قائمة الفروع
+                            const branchesHtml = branchListCache.map(b => `<option value="${b}">${b}</option>`).join('');
+                            
+                            // تحديث كل خانات الفروع في النظام
+                            const branchSelectors = ['f-branch-master-sel', 'adm-whatsapp-br-sel', 'reg-user-branch-sel-core', 'global-branch-filter', 'log-filter-branch'];
+                            branchSelectors.forEach(id => {
+                                const el = document.getElementById(id);
+                                if (el) {
+                                    const currentVal = el.value;
+                                    if (id === 'reg-user-branch-sel-core') {
+                                        el.innerHTML = `<option value="ALL">الإدارة العليا</option>` + branchesHtml;
+                                    } else if (id === 'global-branch-filter' || id === 'log-filter-branch') {
+                                        el.innerHTML = `<option value="ALL">-- الكل --</option>` + branchesHtml;
+                                    } else {
+                                        el.innerHTML = branchesHtml;
+                                    }
+                                    if (currentVal) el.value = currentVal;
+                                }
+                            });
 
-                            // تحضير قائمة الفروع
-                            const h = branchListCache.map(b => `<option value="${b}">${b}</option>`).join('');
-
-                            // إذا كان المستخدم ليس سوبر أدمن وليس في الإدارة (فرعه ليس ALL)
-                            if (currentUserSession.role !== 'SUPER' && currentUserSession.branch !== 'ALL') {
-                                // 1. إجبار الفلتر العلوي على فرعه فقط وتعطيله
-                                branchFilter.innerHTML = `<option value="${currentUserSession.branch}">${currentUserSession.branch}</option>`;
-                                branchFilter.value = currentUserSession.branch;
-                                branchFilter.disabled = true; // تعطيل الاختيار
-
-                                // 2. إجبار قائمة "إضافة بلاغ" على فرعه فقط
-                                branchSelect.innerHTML = `<option value="${currentUserSession.branch}">${currentUserSession.branch}</option>`;
-                            } else {
-                                // السوبر أدمن أو الإدارة يرى كل الفروع
-                                branchFilter.innerHTML = `<option value="ALL">-- عرض جميع الفروع --</option>` + h;
-                                branchFilter.disabled = false;
-                                branchSelect.innerHTML = h;
-                            }
-
-                            // تحديث بقية القوائم (واتساب، رتب، إلخ) بنفس المنطق
-                            if(document.getElementById('adm-whatsapp-br-sel')) document.getElementById('adm-whatsapp-br-sel').innerHTML = h;
-
-                            // تحديث الرتب للمسؤول فقط
+                            // 2. تجهيز قائمة الرتب (هنا حل مشكلتك)
                             const ranksObj = systemSettingsCache.custom_ranks || {};
                             const ranksHtml = Object.keys(ranksObj).map(r => `<option value="${r}">${r}</option>`).join('');
-                            if (document.getElementById('reg-user-rank-sel-core')) document.getElementById('reg-user-rank-sel-core').innerHTML = ranksHtml;
+                            
+                            // تحديث خانة "إدارة الصلاحيات" وخانة "تسجيل عضو جديد"
+                            const rankSelectors = ['adm-rank-matrix-sel', 'reg-user-rank-sel-core'];
+                            rankSelectors.forEach(id => {
+                                const el = document.getElementById(id);
+                                if (el) {
+                                    const currentVal = el.value;
+                                    el.innerHTML = (id === 'adm-rank-matrix-sel' ? `<option value="">-- اختر الرتبة --</option>` : '') + ranksHtml;
+                                    if (currentVal) el.value = currentVal;
+                                }
+                            });
                         }
 
                         // 1. دالة تحديث قائمة الفروع في السجل (تأكد من استدعائها في syncUiDropdownSelections)
@@ -2970,13 +2989,31 @@
                     function toggleSidebar() { const n = document.getElementById('system-side-nav'), d = document.getElementById('master-dimmer'); n.classList.toggle('open'); d.style.display = n.classList.contains('open') ? 'block' : 'none'; }
                     function closeAllMenus() { document.getElementById('system-side-nav').classList.remove('open'); closeSidebarControl(); }
                     function switchToAppModule(m) {
+                        // إخفاء كل الموديولات
                         document.querySelectorAll('.nav-link-vip').forEach(b => b.classList.remove('active'));
-                        document.getElementById('tab-'+m).classList.add('active');
-                        ['live','daily','archive','reports','admin'].forEach(id => document.getElementById('module-view-'+id).classList.add('hidden'));
-                        document.getElementById('module-view-'+m).classList.remove('hidden');
-                        if(m==='reports') executeAdvancedAnalyticsSequence();
-                        if(m==='daily') loadDailySnapshotData();
-                        if(window.innerWidth <= 768) closeAllMenus();
+                        document.getElementById('tab-' + m).classList.add('active');
+                        ['live', 'daily', 'archive', 'reports', 'admin'].forEach(id => {
+                            const mod = document.getElementById('module-view-' + id);
+                            if (mod) mod.classList.add('hidden');
+                        });
+
+                        // إظهار الموديول المطلوب
+                        const targetMod = document.getElementById('module-view-' + m);
+                        if (targetMod) targetMod.classList.remove('hidden');
+
+                        // تشغيل دوال التحديث الخاصة بكل صفحة
+                        if (m === 'reports') executeAdvancedAnalyticsSequence();
+                        if (m === 'daily') loadDailySnapshotData();
+
+                        if (m === 'admin') {
+                            // لو دخل صفحة الإدارة، لازم نشغل الدوال دي عشان الجداول تتملي
+                            renderAdminBranchScrollBox();
+                            renderAdminUsersScrollBox();
+                            initPresenceMonitor(); // تشغيل الرادار
+                            loadLogsFromFirebase(); // تحميل السجلات
+                        }
+
+                        if (window.innerWidth <= 768) closeAllMenus();
                     }
                     function renderSystemToast(m, t) {
                         const b = document.getElementById('system-toast-container'), toast = document.createElement('div');

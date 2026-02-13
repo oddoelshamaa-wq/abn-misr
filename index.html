@@ -1292,14 +1292,18 @@
                                 <div class="admin-layout-flex">
                                     <div class="massive-glass-card" style="padding:80px;">
                                         <h3 style="color:var(--gold-master); margin-bottom:60px;">التحكم بالفروع</h3>
+                                        ${currentUserSession.role === 'SUPER' ? `
                                         <div style="display:flex; gap:25px; margin-bottom:40px;">
                                             <input id="adm-branch-name-input" placeholder="اسم الفرع">
                                             <button class="btn-vip-execute-master" style="width:180px;" onclick="addSystemBranchCore()">إدراج</button>
                                         </div>
+                                        ` : ''}
                                         <div id="adm-branches-scroll-box" class="scrollable-admin-list"></div>
                                         <hr style="margin:50px 0; border-color:var(--border-glow-line);">
                                         <h3 style="color:var(--gold-master); margin-bottom:40px;">واتساب الإشعارات</h3>
+                                        ${currentUserSession.role === 'SUPER' ? `
                                         <select id="adm-whatsapp-br-sel" onchange="renderBranchWhatsappList()"></select>
+                                        ` : `<div style="font-weight:600; color:var(--gold-master); margin-bottom:10px;">فرع: ${currentUserSession.branch}</div>`}
                                         <div style="display:flex; gap:25px;">
                                             <input id="adm-whatsapp-phone-input" placeholder="رقم الهاتف">
                                             <button class="btn-vip-execute-master" style="width:180px;" onclick="bindNewWhatsappToBranch()">+ ربط</button>
@@ -1550,7 +1554,12 @@
 
                         async function initPresenceMonitor() {
                             const radarFilter = document.getElementById('radar-branch-filter-select');
-                            const selectedBranch = radarFilter ? radarFilter.value : "SHOW_ALL";
+                            let selectedBranch = radarFilter ? radarFilter.value : "SHOW_ALL";
+                            // For branch managers, default to their branch
+                            if (currentUserSession.title === 'مدير فرع' && selectedBranch === "SHOW_ALL") {
+                                selectedBranch = currentUserSession.branch;
+                                if (radarFilter) radarFilter.value = selectedBranch;
+                            }
 
                             // 1. جلب كل الموظفين المسجلين في النظام
                             const usersSnap = await dbHub.ref('users').once('value');
@@ -1615,11 +1624,17 @@
                             // جلب القيم من مدخلات الفلتر
                             const searchName = document.getElementById('log-search-name').value.toLowerCase();
                             const filterDate = document.getElementById('log-filter-date').value;
-                            const filterBranch = document.getElementById('log-filter-branch').value;
+                            let filterBranch = document.getElementById('log-filter-branch').value;
                             const list = document.getElementById('adm-access-logs-list');
 
                             if(!list) return;
                             list.innerHTML = '';
+
+                            // For branch managers, only show their branch logs
+                            if (currentUserSession.title === 'مدير فرع' && currentUserSession.role !== 'SUPER') {
+                                filterBranch = currentUserSession.branch;
+                                document.getElementById('log-filter-branch').value = filterBranch;
+                            }
 
                             // تصفية المصفوفة بناءً على الشروط الـ 3
                             const filtered = allAccessLogsCache.filter(log => {
@@ -1824,43 +1839,37 @@
                         }
 
                         async function loadDailySnapshotData() {
-                            const dateStr = document.getElementById('daily-master-date-picker').value;
+                            let dateStr = document.getElementById('daily-master-date-picker').value;
                             const gridBox = document.getElementById('render-daily-grid-hub');
-
                             if (!gridBox) return;
-                            gridBox.innerHTML = `<h2 style="grid-column:1/-1;text-align:center;padding:100px; color:var(--gold-master);">جاري سحب البيانات من السحاب...</h2>`;
 
-                            try {
-                                // سحب البيانات من فايربيز
-                                const dSnap = await dbHub.ref(`daily_stats/${dateStr}`).get();
-                                const dailyData = dSnap.val() || {};
+                            gridBox.innerHTML = `<h2 style="grid-column:1/-1;text-align:center;padding:100px; color:var(--gold-master);">جاري التحميل...</h2>`;
 
-                                // التأكد من وجود فروع
-                                if (branchListCache.length === 0) {
-                                    gridBox.innerHTML = `<h2 style="grid-column:1/-1;text-align:center;padding:100px;">⚠️ لا توجد فروع مسجلة. اذهب للإدارة وأضف الفروع أولاً.</h2>`;
-                                    return;
-                                }
+                            const dSnap = await dbHub.ref(`daily_stats/${dateStr}`).get();
+                            const dailyData = dSnap.val() || {};
 
-                                gridBox.innerHTML = "";
-                                const p = systemSettingsCache.permissions ? (systemSettingsCache.permissions[currentUserSession.title] || {}) : {};
-                                const canEdit = p.daily_edit || currentUserSession.role === 'SUPER';
-                                const canSeeAll = p.view_all || currentUserSession.branch === 'ALL' || currentUserSession.role === 'SUPER';
+                            const userBranch = currentUserSession.branch;
+                            const isMaster = (currentUserSession.role === 'SUPER' || userBranch === 'ALL');
 
-                                branchListCache.forEach(branch => {
-                                    if(!canSeeAll && branch !== currentUserSession.branch) return;
-                                    gridBox.innerHTML += `
-                                        <div class="massive-glass-card branch-data-card">
-                                            <h4 style="font-size:2.5rem;">${branch}</h4>
-                                            <input type="number" class="massive-daily-input"
-                                                   value="${dailyData[branch] || 0}"
-                                                   ${canEdit ? '' : 'disabled'}
-                                                   onchange="commitDailyOrderValue('${dateStr}','${branch}',this.value)">
-                                            <div style="margin-top:20px;color:var(--text-muted-core);">أوردرات ${dateStr}</div>
-                                        </div>`;
-                                });
-                            } catch (error) {
-                                gridBox.innerHTML = `<h2 style="color:red; text-align:center;">خطأ في الاتصال: ${error.message}</h2>`;
-                            }
+                            // تحديد أي فروع ستظهر في الشاشة
+                            const branchesToShow = isMaster ? branchListCache : [userBranch];
+
+                            const p = systemSettingsCache.permissions ? (systemSettingsCache.permissions[currentUserSession.title] || {}) : {};
+                            const canEdit = p.daily_edit || currentUserSession.role === 'SUPER';
+
+                            let html = '';
+                            branchesToShow.forEach(branch => {
+                                html += `
+                                    <div class="massive-glass-card branch-data-card">
+                                        <h4 style="font-size:2.5rem;">${branch}</h4>
+                                        <input type="number" class="massive-daily-input"
+                                               value="${dailyData[branch] || 0}"
+                                               ${canEdit ? '' : 'disabled'}
+                                               onchange="commitDailyOrderValue('${dateStr}','${branch}',this.value)">
+                                        <div style="margin-top:20px;color:var(--text-muted-core);">أوردرات يوم ${dateStr}</div>
+                                    </div>`;
+                            });
+                            gridBox.innerHTML = html || `<h2 style="grid-column:1/-1;text-align:center;padding:100px;">لا توجد بيانات متاحة</h2>`;
                         }
 
                         async function commitDailyOrderValue(date, br, val) {
@@ -1906,18 +1915,33 @@
                         }
 
                         function renderLiveBroadcastMatrix() {
-                            const box = document.getElementById('render-live-feed-matrix'); box.innerHTML = "";
-                            const selectedBranch = document.getElementById('global-branch-filter').value;
-                            const p = systemSettingsCache.permissions ? (systemSettingsCache.permissions[currentUserSession.title] || {}) : {};
-                            const canSeeAll = p.view_all || currentUserSession.branch === 'ALL' || currentUserSession.role === 'SUPER';
+                            const box = document.getElementById('render-live-feed-matrix');
+                            if (!box) return;
+                            box.innerHTML = "";
+
+                            // القاعدة الذهبية للعزل:
+                            // إذا كان المستخدم "SUPER" أو فرعه هو "ALL"، يتبع الفلتر العلوي.
+                            // إذا كان موظف فرع عادي، يرى فرعه فقط إجبارياً.
+                            const userBranch = currentUserSession.branch;
+                            const isMasterAdmin = (currentUserSession.role === 'SUPER' || userBranch === 'ALL');
+                            const selectedFilter = document.getElementById('global-branch-filter').value;
+
+                            let html = '';
                             Object.keys(complaintsCache).reverse().forEach(id => {
                                 const op = complaintsCache[id];
                                 if(op.status === 'done') return;
-                                if(!canSeeAll && op.branch !== currentUserSession.branch) return;
-                                // شرط الفلترة بالفرع المختار
-                                if(selectedBranch !== 'ALL' && op.branch !== selectedBranch) return;
-                                box.innerHTML += generateTicketMarkup(id, op, true, p);
+
+                                if (isMasterAdmin) {
+                                    // الأدمن يرى ما يختاره من الفلتر
+                                    if(selectedFilter !== 'ALL' && op.branch !== selectedFilter) return;
+                                } else {
+                                    // موظف الفرع لا يرى إلا فرعه الخاص المخزن في حسابه
+                                    if(op.branch !== userBranch) return;
+                                }
+
+                                html += generateTicketMarkup(id, op, true, {});
                             });
+                            box.innerHTML = html;
                         }
 
                         function runArchiveRefreshSequence() {
@@ -2006,15 +2030,29 @@
                             const to = document.getElementById('reports-date-to').value;
                             if (!from || !to) return;
 
+                            // --- [بداية تعديل العزل] ---
+                            let branchesToProcess = [];
+                            // إذا كان سوبر أدمن يرى كل الفروع، غير ذلك يرى فرعه المخصص فقط
+                            if (currentUserSession.role === 'SUPER' || currentUserSession.branch === 'ALL') {
+                                branchesToProcess = branchListCache;
+                            } else {
+                                branchesToProcess = [currentUserSession.branch];
+                            }
+                            // --- [نهاية تعديل العزل] ---
+
                             // 1. جلب البيانات من السحاب
                             const dSnap = await dbHub.ref('daily_stats').get();
                             const allOrders = dSnap.val() || {};
-                            const ops = Object.values(complaintsCache).filter(o => o.date >= from && o.date <= to);
+                            // فتلرة الشكاوى لتشمل فقط الفروع المسموح بها للمستخدم
+                            const ops = Object.values(complaintsCache).filter(o =>
+                                o.date >= from &&
+                                o.date <= to &&
+                                branchesToProcess.includes(o.branch)
+                            );
 
-                            // 2. تعريف أنواع الشكاوى (نفس ترتيب الصورة)
                             const types = ["تأخير", "سوء خدمه", "ناقص", "سوء تعبئه", "خطأ فى الطلب", "خطأ فى الباقى", "جوده", "جسم غريب", "سوء سلوك", "مندوب", "طلب بارد", "رسبي", "تأخير شكوي", "تواصل من الفرع", "سوشيال"];
 
-                            // --- بناء الجدول الأول (الكبير) ---
+                            // بناء الجدول الأول (المصفوفة)
                             let table1Html = `<table class="premium-matrix">
                                 <thead>
                                     <tr>
@@ -2029,11 +2067,12 @@
                             let grandTotals = Array(types.length + 3).fill(0);
                             let branchStats = [];
 
-                            branchListCache.forEach(br => {
+                            // نستخدم هنا branchesToProcess بدلاً من القائمة الكاملة
+                            branchesToProcess.forEach(br => {
                                 let brOps = ops.filter(o => o.branch === br);
                                 let counts = types.map(t => brOps.filter(o => o.type === t).length);
 
-                                let taTotal = counts[13] + counts[14]; // تواصل من الفرع + سوشيال
+                                let taTotal = counts[13] + counts[14];
                                 let restaurantTotal = brOps.length;
                                 let hdTotal = restaurantTotal - taTotal;
 
@@ -2045,25 +2084,23 @@
                                     <td style="background:rgba(255,255,255,0.05)">${restaurantTotal}</td>
                                 </tr>`;
 
-                                // حساب إجمالي العمليات للجدول الثاني
                                 let brOrders = 0;
                                 Object.keys(allOrders).forEach(d => { if(d >= from && d <= to) brOrders += parseInt(allOrders[d][br] || 0); });
                                 branchStats.push({ name: br, orders: brOrders, comps: restaurantTotal });
 
-                                // تجميع الإجماليات النهائية للسفل
                                 counts.forEach((c, i) => grandTotals[i] += c);
                                 grandTotals[types.length] += taTotal;
                                 grandTotals[types.length + 1] += hdTotal;
                                 grandTotals[types.length + 2] += restaurantTotal;
                             });
 
+                            // سطر الإجمالي سيظهر إجمالي ما يراه المستخدم فقط (فرعه فقط أو الكل)
                             table1Html += `<tr style="background:#1e40af; color:white; font-weight:900;">
                                 <td>الاجمالي</td>${grandTotals.map(gt => `<td>${gt}</td>`).join('')}
                             </tr></tbody></table>`;
                             document.getElementById('matrix-report-table-container').innerHTML = table1Html;
 
-
-                            // --- بناء الجدول الثاني (الصغير) ---
+                            // بناء الجدول الثاني (ملخص النسب)
                             let table2Html = `<table class="premium-matrix">
                                 <thead>
                                     <tr><th>المطعم</th><th>العمليات</th><th>الشكاوى</th><th>النسبة</th></tr>
@@ -2087,14 +2124,9 @@
                             </tr></tbody></table>`;
                             document.getElementById('summary-percentage-table-container').innerHTML = table2Html;
 
-
-                            // --- رسم الرسم البياني ---
+                            // تحديث الرسوم البيانية والكروت (ستعتمد تلقائياً على البيانات المفلترة أعلاه)
                             renderPremiumBarChart(branchStats);
-
-                            // --- رسم الرسم الدائري لأنواع الشكاوى ---
                             renderComplaintTypesPieChart(ops);
-
-                            // --- تحديث مؤشرات KPI ---
                             updateKPIs(totalOrdersAll, totalCompsAll, finalPercAll);
                         }
 
@@ -2629,60 +2661,35 @@
 
                         // Admin Utilities
                         function syncUiDropdownSelections() {
-                            // 1. تحضير خيارات الفروع
+                            const branchFilter = document.getElementById('global-branch-filter');
+                            const branchSelect = document.getElementById('f-branch-master-sel');
+
+                            // تحضير قائمة الفروع
                             const h = branchListCache.map(b => `<option value="${b}">${b}</option>`).join('');
 
-                            // 2. تحديث قائمة إنشاء البلاغ وقائمة الواتساب وقائمة تسجيل الموظفين
-                            if(document.getElementById('f-branch-master-sel')) document.getElementById('f-branch-master-sel').innerHTML = h;
+                            // إذا كان المستخدم ليس سوبر أدمن وليس في الإدارة (فرعه ليس ALL)
+                            if (currentUserSession.role !== 'SUPER' && currentUserSession.branch !== 'ALL') {
+                                // 1. إجبار الفلتر العلوي على فرعه فقط وتعطيله
+                                branchFilter.innerHTML = `<option value="${currentUserSession.branch}">${currentUserSession.branch}</option>`;
+                                branchFilter.value = currentUserSession.branch;
+                                branchFilter.disabled = true; // تعطيل الاختيار
+
+                                // 2. إجبار قائمة "إضافة بلاغ" على فرعه فقط
+                                branchSelect.innerHTML = `<option value="${currentUserSession.branch}">${currentUserSession.branch}</option>`;
+                            } else {
+                                // السوبر أدمن أو الإدارة يرى كل الفروع
+                                branchFilter.innerHTML = `<option value="ALL">-- عرض جميع الفروع --</option>` + h;
+                                branchFilter.disabled = false;
+                                branchSelect.innerHTML = h;
+                            }
+
+                            // تحديث بقية القوائم (واتساب، رتب، إلخ) بنفس المنطق
                             if(document.getElementById('adm-whatsapp-br-sel')) document.getElementById('adm-whatsapp-br-sel').innerHTML = h;
-                            if(document.getElementById('reg-user-branch-sel-core')) document.getElementById('reg-user-branch-sel-core').innerHTML = `<option value="ALL">الإدارة العليا</option>` + h;
 
-                            // 3. تحديث الفلتر العالمي
-                            const globalFilter = document.getElementById('global-branch-filter');
-                            if(globalFilter) {
-                                const currentVal = globalFilter.value;
-                                globalFilter.innerHTML = `<option value="ALL">-- عرض جميع الفروع --</option>` + h;
-                                globalFilter.value = currentVal;
-                            }
-
-                            // 4. تحديث فلتر التقارير الجديد
-                            const reportsFilter = document.getElementById('reports-branch-filter');
-                            if(reportsFilter) {
-                                // إذا كان المستخدم سوبر أدمن يرى كل الفروع، إذا كان مدير فرع يرى فرعه فقط
-                                if(currentUserSession.branch === 'ALL' || currentUserSession.role === 'SUPER') {
-                                    reportsFilter.innerHTML = `<option value="ALL">-- كل الفروع --</option>` + h;
-                                } else {
-                                    reportsFilter.innerHTML = `<option value="${currentUserSession.branch}">${currentUserSession.branch}</option>`;
-                                }
-                            }
-
-                            // 5. تحديث قائمة فلتر الرادار (اللي سألت عليها)
-                            const radarFilter = document.getElementById('radar-branch-filter-select');
-                            if(radarFilter) {
-                                // بنحفظ القيمة المختارة حالياً عشان متتغيرش مع التحديث
-                                const currentVal = radarFilter.value;
-                                radarFilter.innerHTML = `<option value="SHOW_ALL">-- الكل --</option><option value="ALL">الإدارة العليا</option>` + h;
-                                radarFilter.value = currentVal;
-                            }
-
-                            // تحديث قائمة الرتب
+                            // تحديث الرتب للمسؤول فقط
                             const ranksObj = systemSettingsCache.custom_ranks || {};
                             const ranksHtml = Object.keys(ranksObj).map(r => `<option value="${r}">${r}</option>`).join('');
-                            
-                            // وضع الرتب في القائمة المنسدلة للإدارة
-                            const rankSelect = document.getElementById('adm-rank-matrix-sel');
-                            if (rankSelect) {
-                                rankSelect.innerHTML = `<option value="">-- اختر الرتبة للتعديل --</option>` + ranksHtml;
-                            }
-
-                            // وضع الرتب في قائمة تسجيل عضو جديد
-                            const regRankSelect = document.getElementById('reg-user-rank-sel-core');
-                            if (regRankSelect) {
-                                regRankSelect.innerHTML = ranksHtml;
-                            }
-
-                            // 7. تحديث قائمة الفروع في السجل
-                            updateLogBranchDropdown();
+                            if (document.getElementById('reg-user-rank-sel-core')) document.getElementById('reg-user-rank-sel-core').innerHTML = ranksHtml;
                         }
 
                         // 1. دالة تحديث قائمة الفروع في السجل (تأكد من استدعائها في syncUiDropdownSelections)
@@ -2718,11 +2725,14 @@
                             if(systemSettingsCache.branches) {
                                 Object.keys(systemSettingsCache.branches).forEach(key => {
                                     const branchName = systemSettingsCache.branches[key];
+                                    // عزل البيانات: مدير الفرع يرى فرعه فقط
+                                    if(currentUserSession.role !== 'SUPER' && currentUserSession.title === 'مدير فرع' && branchName !== currentUserSession.branch) return;
+                                    const canDelete = currentUserSession.role === 'SUPER';
                                     b.innerHTML += `
                                         <div class="admin-row-item">
                                             <span>${branchName}</span>
-                                            <i class="fas fa-trash" style="color:var(--danger-pulse);cursor:pointer;"
-                                               onclick="deleteBranchFromServer('${key}')"></i>
+                                            ${canDelete ? `<i class="fas fa-trash" style="color:var(--danger-pulse);cursor:pointer;"
+                                               onclick="deleteBranchFromServer('${key}')"></i>` : ''}
                                         </div>`;
                                 });
                             }
@@ -2743,7 +2753,8 @@
                             });
                         }
                         function renderBranchWhatsappList() {
-                            const br = document.getElementById('adm-whatsapp-br-sel').value, b = document.getElementById('adm-whatsapp-scroll-box'); b.innerHTML = "";
+                            const br = currentUserSession.role === 'SUPER' ? document.getElementById('adm-whatsapp-br-sel').value : currentUserSession.branch;
+                            const b = document.getElementById('adm-whatsapp-scroll-box'); b.innerHTML = "";
                             const phones = JSON.parse(localStorage.getItem('whatsapp_' + br) || '[]');
                             phones.forEach((phone, index) => b.innerHTML += `<div class="admin-row-item"><span>${phone}</span><i class="fas fa-trash" style="color:var(--danger-pulse);cursor:pointer;" onclick="deleteWhatsapp('${br}', ${index})"></i></div>`);
                         }
@@ -2787,6 +2798,8 @@
                             const users = JSON.parse(localStorage.getItem('users') || '{}');
                             Object.keys(users).forEach(uid => {
                                 const u = users[uid];
+                                // عزل البيانات: مدير الفرع يرى موظفي فرعه فقط
+                                if(currentUserSession.role !== 'SUPER' && currentUserSession.title === 'مدير فرع' && u.branch !== currentUserSession.branch) return;
                                 // تخطي السوبر أدمن الأساسي من الحذف لكن مسموح بالتعديل
                                 const isSuper = uid === 'super';
 
@@ -2934,8 +2947,21 @@
                         }
                     function runPermissionShieldCheck() {
                         const p = systemSettingsCache.permissions ? (systemSettingsCache.permissions[currentUserSession.title] || {}) : {};
-                        if(p.admin_access || currentUserSession.role === 'SUPER') document.getElementById('tab-admin').classList.remove('hidden');
-                        document.getElementById('floating-plus-btn').className = (p.create_ticket || currentUserSession.role === 'SUPER' || currentUserSession.title === 'ديسبتشر') ? 'floating-action-master' : 'hidden';
+
+                        // 1. حماية تبويب الإدارة: للسوبر أدمن فقط
+                        if (currentUserSession.role === 'SUPER') {
+                            document.getElementById('tab-admin').classList.remove('hidden');
+                        } else {
+                            document.getElementById('tab-admin').classList.add('hidden');
+                            // إذا حاول مستخدم عادي الدخول للموديول يدوياً نرجعه للبث الحي
+                            if (document.getElementById('tab-admin').classList.contains('active')) {
+                                switchToAppModule('live');
+                            }
+                        }
+
+                        // 2. صلاحية إنشاء بلاغ (للدسبتشر أو السوبر أو من لديه صلاحية)
+                        const canCreate = p.create_ticket || currentUserSession.role === 'SUPER' || currentUserSession.title === 'ديسبتشر';
+                        document.getElementById('floating-plus-btn').className = canCreate ? 'floating-action-master' : 'hidden';
                     }
 
                     // Helpers

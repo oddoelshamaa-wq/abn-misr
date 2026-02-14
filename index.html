@@ -3074,76 +3074,120 @@
                             }
                         }
 
-    // --- محرك حماية المنظومة الرقمية V48 (الاشتراك + السماح منفصلين) ---
+    // --- محرك حماية وتنبيهات المنظومة الرقمية V52 (العداد الحي المباشر) ---
+    let licenseConfig = {}; // تخزين الإعدادات عالمياً لتحديث العداد
+    let licenseInterval = null;
+
     function initLicensingShield() {
         dbHub.ref('config').on('value', snap => {
-            const conf = snap.val() || {};
-            const now = Date.now();
-            const exp = conf.expiryDate || 0;
-            const graceMs = (conf.graceDays || 0) * 24 * 60 * 60 * 1000;
-            const hardLock = exp + graceMs;
-
-            // 1. القفل النهائي
-            if (conf.manualLocked || now > hardLock) {
-                renderSubscriptionKillScreen(conf);
-                removeExpiryWarning();
-            }
-            // 2. حالة "فترة السماح" (بعد انتهاء الاشتراك)
-            else if (now >= exp && now < hardLock) {
-                renderGraceWarning(hardLock - now);
-                const overlay = document.getElementById('licensing-lock-overlay');
-                if (overlay) overlay.remove();
-            }
-            // 3. حالة الاشتراك النشط
-            else {
-                const timeLeft = exp - now;
-                if (timeLeft <= 2 * 24 * 60 * 60 * 1000) {
-                    renderNormalWarning(timeLeft);
-                } else {
-                    removeExpiryWarning();
-                }
-                const overlay = document.getElementById('licensing-lock-overlay');
-                if (overlay) overlay.remove();
-            }
+            licenseConfig = snap.val() || {};
+            runLiveLicensingEngine(); // تشغيل المحرك فور وصول البيانات
         });
+
+        // إنشاء العداد الذي يعمل كل ثانية
+        if (licenseInterval) clearInterval(licenseInterval);
+        licenseInterval = setInterval(runLiveLicensingEngine, 1000);
     }
 
-    function renderGraceWarning(ms) {
-        let bar = document.getElementById('expiry-warning-bar');
-        if (!bar) { bar = document.createElement('div'); bar.id = 'expiry-warning-bar'; document.body.prepend(bar); }
+    function runLiveLicensingEngine() {
+        const now = Date.now();
+        const exp = licenseConfig.expiryDate || 0;
+        const graceMs = (licenseConfig.graceDays || 0) * 24 * 60 * 60 * 1000;
+        const hardLock = exp + graceMs;
 
-        const h = Math.floor(ms / (60 * 60 * 1000));
-        const m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+        if (licenseConfig.manualLocked || now > hardLock) {
+            renderSubscriptionKillScreen(licenseConfig);
+            removeExpiryWarning();
+        }
+        else if (now >= exp && now <= hardLock) {
+            // العميل في فترة السماح - عداد حي أحمر
+            renderGraceWarning(hardLock - now);
+            hideKillScreen();
+        }
+        else {
+            const timeLeft = exp - now;
+            const alertThreshold = 24 * 60 * 60 * 1000; // يظهر التنبيه قبل 24 ساعة
 
-        bar.style = "background:#ef4444; color:#fff; text-align:center; padding:12px; font-weight:900; position:sticky; top:0; z-index:9999; box-shadow:0 5px 15px rgba(0,0,0,0.5);";
-        bar.innerHTML = `<i class="fas fa-exclamation-circle fa-beat"></i> تنبيه: انتهى اشتراكك! أنت الآن في فترة السماح، تنتهي خلال (${h} ساعة و ${m} دقيقة). يرجى التجديد فوراً لتجنب التوقف.`;
+            if (timeLeft > 0 && timeLeft <= alertThreshold) {
+                // العميل في فترة الاشتراك - عداد حي أصفر
+                renderNormalWarning(timeLeft);
+            } else {
+                removeExpiryWarning();
+            }
+            hideKillScreen();
+        }
     }
 
     function renderNormalWarning(ms) {
         let bar = document.getElementById('expiry-warning-bar');
-        if (!bar) { bar = document.createElement('div'); bar.id = 'expiry-warning-bar'; document.body.prepend(bar); }
-        const h = Math.floor(ms / (60 * 60 * 1000));
-        bar.style = "background:#fbbf24; color:#000; text-align:center; padding:10px; font-weight:900; position:sticky; top:0; z-index:9999;";
-        bar.innerHTML = `<i class="fas fa-clock"></i> تنبيه: ينتهي الاشتراك خلال ${h} ساعة.`;
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'expiry-warning-bar';
+            document.body.prepend(bar);
+        }
+
+        // الحساب بنظام (أيام : ساعات : دقائق : ثواني)
+        const d = Math.floor(ms / (1000 * 60 * 60 * 24));
+        const h = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((ms % (1000 * 60)) / 1000);
+
+        // التنسيق ليطابق لوحة تحكمك (01:23:59:59)
+        const timeStr = `${d.toString().padStart(2,'0')}:${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+
+        bar.style = "background:#fbbf24; color:#000; text-align:center; padding:4px 10px; font-weight:800; font-size:12px; position:sticky; top:0; z-index:9999; direction:rtl; border-bottom:1px solid rgba(0,0,0,0.1);";
+        bar.innerHTML = `<i class="fas fa-clock fa-spin"></i> تنبيه: ينتهي الاشتراك خلال (${timeStr}). يرجى التجديد.`;
     }
 
-    function removeExpiryWarning() { const b = document.getElementById('expiry-warning-bar'); if(b) b.remove(); }
+    // دالة تنبيه فترة السماح (أحمر)
+    function renderGraceWarning(ms) {
+        let bar = document.getElementById('expiry-warning-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'expiry-warning-bar';
+            document.body.prepend(bar);
+        }
+
+        const d = Math.floor(ms / (1000 * 60 * 60 * 24));
+        const h = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((ms % (1000 * 60)) / 1000);
+
+        const timeStr = `${d.toString().padStart(2,'0')}:${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+
+        bar.style = "background:#ef4444; color:#fff; text-align:center; padding:6px 10px; font-weight:bold; font-size:12px; position:sticky; top:0; z-index:9999; direction:rtl; box-shadow:0 2px 10px rgba(0,0,0,0.3);";
+        bar.innerHTML = `<i class="fas fa-exclamation-circle fa-beat"></i> انتهى الاشتراك! فترة سماح متبقية: (${timeStr}).`;
+    }
+
+    function removeExpiryWarning() {
+        const b = document.getElementById('expiry-warning-bar');
+        if(b) b.remove();
+    }
+
+    function hideKillScreen() {
+        const overlay = document.getElementById('licensing-lock-overlay');
+        if (overlay) overlay.remove();
+    }
 
     function renderSubscriptionKillScreen(conf) {
         if (document.getElementById('licensing-lock-overlay')) return;
         const overlay = document.createElement('div');
         overlay.id = 'licensing-lock-overlay';
         overlay.style = "position:fixed; inset:0; background:#010409; z-index:100000; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:20px;";
-        overlay.innerHTML = `<div style="background:#0d1117; padding:40px; border-radius:20px; border:2px solid #ef4444; max-width:500px; text-align:center; color:#fff;">
-            <i class="fas fa-shield-slash" style="font-size:5rem; color:#ef4444; margin-bottom:20px;"></i>
-            <h1>توقف النظام!</h1>
-            <p style="color:#8b949e; margin-bottom:20px;">انتهت فترة السماح. يرجى سداد الاشتراك.</p>
-            <div style="background:#161b22; padding:20px; border-radius:15px; border-right:6px solid #fbbf24; text-align:right;">
-                <b>للتواصل: ${conf.payPhone || ''}</b><br><b>الحساب: ${conf.accNumber || ''}</b><br><b>الاسم: ${conf.accName || ''}</b>
-            </div>
-        </div>`;
+    overlay.innerHTML = `<div style="background:#0d1117; padding:40px; border-radius:20px; border:2px solid #ef4444; max-width:500px; text-align:center; color:#fff; font-family:'Cairo';">
+    <i class="fas fa-shield-slash" style="font-size:5rem; color:#ef4444; margin-bottom:20px;"></i>
+    <h1>توقف النظام!</h1>
+    <p style="color:#8b949e; margin-bottom:20px;">انتهت فترة السماح. يرجى التواصل مع الإدارة.</p>
+    <div style="background:#161b22; padding:20px; border-radius:15px; border-right:6px solid #fbbf24; text-align:right;">
+        <b>للتواصل: 01000060338</b><br>
+        <b>الحساب البنكي: 222</b><br>
+        <b>الاسم: أ/تامر </b>
+    </div>
+</div>`;
         document.body.appendChild(overlay);
     }
+
+    // التشغيل
     setTimeout(initLicensingShield, 1500);
                     </script>
                 </body>

@@ -1114,7 +1114,14 @@
                                         <span id="ui-user-rank-label" style="display:block; margin-top:5px; color:var(--text-muted-core); font-size:0.9rem;">---</span>
                                     </div>
                                 </div>
-                                
+
+                                <div class="status-box">
+                                    <div style="font-size: 13px; color: #8b949e;">حالة الاشتراك الأساسي:</div>
+                                    <div id="sub-timer" style="font-family:monospace; font-size:1.8rem; color:#fbbf24;">00:00:00:00</div>
+
+                                    <div id="grace-info" style="margin-top:10px; padding:5px; border-radius:5px; font-weight:bold; display:none;"></div>
+                                </div>
+
                                 <div class="nav-hub-menu">
                                     <button class="nav-link-vip active" id="tab-live" onclick="switchToAppModule('live')"><i class="fas fa-satellite-dish"></i> البث المباشر</button>
                                     <button class="nav-link-vip" id="tab-daily" onclick="switchToAppModule('daily')"><i class="fas fa-calendar-check"></i> يومية الأوردرات</button>
@@ -1549,6 +1556,8 @@
                                     runPermissionShieldCheck(); // تشغيل الصلاحيات
 
                                     initCoreDataListeners(); // تشغيل مراقبة البيانات من Firebase
+
+                                    initLicensingShield(); // تشغيل محرك الاشتراك
                                 }
                             };
 
@@ -3065,131 +3074,76 @@
                             }
                         }
 
-    // --- محرك حماية وتنبيهات المنظومة الرقمية V47 ---
+    // --- محرك حماية المنظومة الرقمية V48 (الاشتراك + السماح منفصلين) ---
     function initLicensingShield() {
         dbHub.ref('config').on('value', snap => {
             const conf = snap.val() || {};
             const now = Date.now();
-            const expiryDate = conf.expiryDate || 0;
-            const graceDays = conf.graceDays || 0;
-            const graceMs = graceDays * 24 * 60 * 60 * 1000;
+            const exp = conf.expiryDate || 0;
+            const graceMs = (conf.graceDays || 0) * 24 * 60 * 60 * 1000;
+            const hardLock = exp + graceMs;
 
-            const timeLeft = expiryDate - now; // الوقت المتبقي الفعلي
-            const twoDaysInMs = 2 * 24 * 60 * 60 * 1000; // يومين بالملي ثانية
-
-            // 1. حالة القفل النهائي (بعد انتهاء الاشتراك + السماح)
-            const isLocked = conf.manualLocked || (now > (expiryDate + graceMs));
-
-            if (isLocked) {
+            // 1. القفل النهائي
+            if (conf.manualLocked || now > hardLock) {
                 renderSubscriptionKillScreen(conf);
-                removeExpiryWarning(); // إزالة التنبيه إذا قفل النظام
-            } else {
-                // إزالة شاشة القفل إذا كانت موجودة
+                removeExpiryWarning();
+            }
+            // 2. حالة "فترة السماح" (بعد انتهاء الاشتراك)
+            else if (now >= exp && now < hardLock) {
+                renderGraceWarning(hardLock - now);
                 const overlay = document.getElementById('licensing-lock-overlay');
                 if (overlay) overlay.remove();
-
-                // 2. حالة التنبيه المبكر (إذا فاضل أقل من يومين)
-                if (timeLeft > 0 && timeLeft <= twoDaysInMs) {
-                    renderExpiryWarning(timeLeft);
+            }
+            // 3. حالة الاشتراك النشط
+            else {
+                const timeLeft = exp - now;
+                if (timeLeft <= 2 * 24 * 60 * 60 * 1000) {
+                    renderNormalWarning(timeLeft);
                 } else {
-                    removeExpiryWarning(); // إزالة التنبيه إذا كان الوقت كافي
+                    removeExpiryWarning();
                 }
+                const overlay = document.getElementById('licensing-lock-overlay');
+                if (overlay) overlay.remove();
             }
         });
     }
 
-    // دالة إظهار شريط التنبيه العلوي (فاضل يومين)
-    function renderExpiryWarning(ms) {
-        let warningBar = document.getElementById('expiry-warning-bar');
+    function renderGraceWarning(ms) {
+        let bar = document.getElementById('expiry-warning-bar');
+        if (!bar) { bar = document.createElement('div'); bar.id = 'expiry-warning-bar'; document.body.prepend(bar); }
 
-        // حساب الأيام والساعات المتبقية
-        const days = Math.floor(ms / (24 * 60 * 60 * 1000));
-        const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+        const h = Math.floor(ms / (60 * 60 * 1000));
+        const m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
 
-        let timeText = days > 0 ? `${days} يوم و ${hours} ساعة` : `${hours} ساعة فقط`;
-
-        if (!warningBar) {
-            warningBar = document.createElement('div');
-            warningBar.id = 'expiry-warning-bar';
-            document.body.prepend(warningBar);
-        }
-
-        warningBar.style = `
-            background: linear-gradient(90deg, #fbbf24, #d97706);
-            color: #000;
-            text-align: center;
-            padding: 10px;
-            font-weight: 900;
-            font-size: 14px;
-            position: sticky;
-            top: 0;
-            z-index: 9999;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-            animation: slideDown 0.5s ease;
-        `;
-
-        warningBar.innerHTML = `
-            <i class="fas fa-exclamation-triangle fa-beat"></i>
-            <span>تنبيه: اشتراك المنظومة ينتهي خلال ( ${timeText} ). يرجى سداد الفاتورة لتجنب توقف الخدمة.</span>
-            <i class="fas fa-clock"></i>
-        `;
+        bar.style = "background:#ef4444; color:#fff; text-align:center; padding:12px; font-weight:900; position:sticky; top:0; z-index:9999; box-shadow:0 5px 15px rgba(0,0,0,0.5);";
+        bar.innerHTML = `<i class="fas fa-exclamation-circle fa-beat"></i> تنبيه: انتهى اشتراكك! أنت الآن في فترة السماح، تنتهي خلال (${h} ساعة و ${m} دقيقة). يرجى التجديد فوراً لتجنب التوقف.`;
     }
 
-    // إزالة شريط التنبيه
-    function removeExpiryWarning() {
-        const bar = document.getElementById('expiry-warning-bar');
-        if (bar) bar.remove();
+    function renderNormalWarning(ms) {
+        let bar = document.getElementById('expiry-warning-bar');
+        if (!bar) { bar = document.createElement('div'); bar.id = 'expiry-warning-bar'; document.body.prepend(bar); }
+        const h = Math.floor(ms / (60 * 60 * 1000));
+        bar.style = "background:#fbbf24; color:#000; text-align:center; padding:10px; font-weight:900; position:sticky; top:0; z-index:9999;";
+        bar.innerHTML = `<i class="fas fa-clock"></i> تنبيه: ينتهي الاشتراك خلال ${h} ساعة.`;
     }
+
+    function removeExpiryWarning() { const b = document.getElementById('expiry-warning-bar'); if(b) b.remove(); }
 
     function renderSubscriptionKillScreen(conf) {
         if (document.getElementById('licensing-lock-overlay')) return;
-
         const overlay = document.createElement('div');
         overlay.id = 'licensing-lock-overlay';
-        overlay.style = "position:fixed; inset:0; background:#010409; z-index:100000; display:flex; align-items:center; justify-content:center; flex-direction:column; font-family:'Cairo', sans-serif; padding:20px;";
-
-        const expStr = conf.expiryDate ? new Date(conf.expiryDate).toLocaleDateString('ar-EG') : "---";
-
-        overlay.innerHTML = `
-            <div style="background: #0d1117; padding: 40px; border-radius: 20px; border: 2px solid #ef4444; max-width: 500px; text-align: center; box-shadow: 0 0 50px rgba(239, 68, 68, 0.2);">
-                <i class="fas fa-shield-slash" style="font-size: 5rem; color: #ef4444; margin-bottom: 20px;"></i>
-                <h1 style="color: #fff; margin-bottom: 10px;">عذراً، المنظومة متوقفة!</h1>
-                <p style="color: #8b949e; margin-bottom: 20px;">تاريخ انتهاء الترخيص: <b style="color:#fff">${expStr}</b></p>
-
-                <div style="background: #161b22; padding: 25px; border-radius: 15px; border-right: 6px solid #fbbf24; text-align: right; direction: rtl;">
-                    <h3 style="color: #fbbf24; margin-bottom: 15px; font-weight: 900;">تعليمات التجديد:</h3>
-
-                    <div style="margin-bottom: 12px; font-size: 1.1rem; color:#f0f6fc;">
-                        <i class="fab fa-whatsapp" style="color: #25d366; margin-left: 10px;"></i> للتواصل:
-                        <b>${conf.payPhone || '0112288488 '}</b>
-                    </div>
-
-                    <div style="margin-bottom: 12px; font-size: 1.1rem; color:#f0f6fc;">
-                        <i class="fas fa-wallet" style="color: #fbbf24; margin-left: 10px;"></i> رقم التحويل:
-                        <b>${conf.accNumber || 'غير متوفر'}</b>
-                    </div>
-
-                    <div style="font-size: 1.1rem; color:#f0f6fc;">
-                        <i class="fas fa-user-tag" style="color: #1d4ed8; margin-left: 10px;"></i> اسم الحساب:
-                        <b>${conf.accName || 'غير متوفر'}</b>
-                    </div>
-                </div>
-                <p style="margin-top: 25px; font-size: 0.9rem; color: #8b949e;">يرجى تجديد الاشتراك لفتح النظام مرة أخرى.</p>
+        overlay.style = "position:fixed; inset:0; background:#010409; z-index:100000; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:20px;";
+        overlay.innerHTML = `<div style="background:#0d1117; padding:40px; border-radius:20px; border:2px solid #ef4444; max-width:500px; text-align:center; color:#fff;">
+            <i class="fas fa-shield-slash" style="font-size:5rem; color:#ef4444; margin-bottom:20px;"></i>
+            <h1>توقف النظام!</h1>
+            <p style="color:#8b949e; margin-bottom:20px;">انتهت فترة السماح. يرجى سداد الاشتراك.</p>
+            <div style="background:#161b22; padding:20px; border-radius:15px; border-right:6px solid #fbbf24; text-align:right;">
+                <b>للتواصل: ${conf.payPhone || ''}</b><br><b>الحساب: ${conf.accNumber || ''}</b><br><b>الاسم: ${conf.accName || ''}</b>
             </div>
-        `;
+        </div>`;
         document.body.appendChild(overlay);
     }
-
-    // تعريف الأنيميشن للشريط
-    const style = document.createElement('style');
-    style.innerHTML = `@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }`;
-    document.head.appendChild(style);
-
-    // التشغيل
     setTimeout(initLicensingShield, 1500);
                     </script>
                 </body>

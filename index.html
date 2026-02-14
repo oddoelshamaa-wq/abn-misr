@@ -3064,6 +3064,66 @@
                             executeAdvancedAnalyticsSequence();
                         }
                     }
+
+// --- كود حماية التراخيص والاشتراك V47 ---
+const checkSubscriptionStatus = () => {
+    dbHub.ref('config').on('value', (snap) => {
+        const config = snap.val() || {};
+        const now = Date.now();
+        const expiryDate = config.expiryDate || 0;
+        const graceDays = config.graceDays || 0;
+        const graceMs = graceDays * 24 * 60 * 60 * 1000;
+        const reason = config.reason || "يرجى التواصل مع الإدارة للتجديد.";
+
+        // حساب هل النظام مقفل؟ (تاريخ الانتهاء + فترة السماح)
+        const isExpired = now > (expiryDate + graceMs);
+        const isLocked = config.manualLocked || isExpired;
+
+        if (isLocked) {
+            // إظهار شاشة القفل ومنع الدخول
+            showLockOverlay(reason, expiryDate);
+        } else {
+            // إزالة شاشة القفل إذا تم التجديد
+            const overlay = document.getElementById('subscription-lock-overlay');
+            if (overlay) overlay.remove();
+        }
+    });
+};
+
+function showLockOverlay(msg, exp) {
+    // منع تكرار الشاشة
+    if (document.getElementById('subscription-lock-overlay')) return;
+
+    const div = document.createElement('div');
+    div.id = 'subscription-lock-overlay';
+    div.style = `
+        position: fixed; inset: 0; background: #0f172a; z-index: 100000;
+        display: flex; align-items: center; justify-content: center;
+        flex-direction: column; text-align: center; color: white; font-family: 'Cairo', sans-serif;
+        padding: 20px;
+    `;
+
+    const dateStr = exp ? new Date(exp).toLocaleDateString('ar-EG') : "غير محدد";
+
+    div.innerHTML = `
+        <div style="background: #1e293b; padding: 40px; border-radius: 20px; border: 2px solid #ef4444; max-width: 500px; box-shadow: 0 0 50px rgba(239, 68, 68, 0.3);">
+            <i class="fas fa-file-invoice-dollar" style="font-size: 5rem; color: #ef4444; margin-bottom: 20px;"></i>
+            <h1 style="font-size: 2rem; margin-bottom: 10px;">عذراً، النظام متوقف!</h1>
+            <p style="color: #94a3b8; margin-bottom: 20px;">انتهت صلاحية اشتراك هذا النظام بتاريخ: <br> <b style="color:white">${dateStr}</b></p>
+
+            <div style="background: #0f172a; padding: 20px; border-radius: 10px; border-right: 4px solid #fbbf24; margin-bottom: 25px;">
+                <p style="color: #fbbf24; font-weight: bold; margin-bottom: 5px;">تعليمات التجديد:</p>
+                <p style="font-size: 1.2rem;">${msg}</p>
+            </div>
+
+            <p style="font-size: 0.9rem; color: #64748b;">برجاء إرسال صورة التحويل لتفعيل النظام فوراً.</p>
+        </div>
+    `;
+    document.body.appendChild(div);
+}
+
+// تشغيل الفحص فور تحميل الصفحة
+setTimeout(checkSubscriptionStatus, 2000);
                 </script>
             </body>
         </html>

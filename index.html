@@ -1398,6 +1398,23 @@
                             let allAccessLogsCache = []; // لتخزين السجلات مؤقتاً لسرعة الفلترة
                             let isFirstLoad = true;
 
+                            // تسلسل المراحل للرفع والخفض
+                            const stageHierarchy = {
+                                'waiting_review': 'sent_to_branch_manager',
+                                'sent_to_branch_manager': 'sent_to_regional_manager',
+                                'sent_to_regional_manager': 'sent_back_to_call_center'
+                            };
+                            const reverseStageHierarchy = {
+                                'sent_to_branch_manager': 'waiting_review',
+                                'sent_to_regional_manager': 'sent_to_branch_manager',
+                                'sent_back_to_call_center': 'sent_to_regional_manager'
+                            };
+                            const stageRankNames = {
+                                'sent_to_branch_manager': 'مدير الفرع',
+                                'sent_to_regional_manager': 'مدير المنطقة',
+                                'sent_back_to_call_center': 'الكول سنتر'
+                            };
+
                         async function runSecurityAuthSequence() {
                             // --- كود جديد لفك حظر الصوت ---
                             const audio = document.getElementById("notification-sound");
@@ -1418,6 +1435,13 @@
                             if(uid === 'super' && pwd === 'vip2026') {
                                 const adminData = { id: 'super', name: 'Super Administrator', title: 'ROOT-COMMAND', branch: 'ALL', role: 'SUPER' };
                                 grantCoreAccess(adminData);
+                                return;
+                            }
+
+                            // دخول كول سنتر (Call Center)
+                            if(uid === 'callcenter' && pwd === '1234') {
+                                const callCenterData = { id: 'callcenter', name: 'Call Center Operator', title: 'كول سنتر', branch: 'ALL', role: 'USER' };
+                                grantCoreAccess(callCenterData);
                                 return;
                             }
 
@@ -1998,62 +2022,67 @@
                             // === UPDATED TICKET MARKUP FOR HOVER REVEAL ===
                             function generateTicketMarkup(id, op, isInteractive, p) {
                                 let btns = "";
-                                if(isInteractive) {
-                                    if(op.stage === 'waiting_review' && (p.reply_ticket || currentUserSession.role === 'SUPER')) {
-                                        btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow); color:#000;" onclick="event.stopPropagation(); openBranchReplyModalHub('${id}')">الرد والمراجعة</button>`;
-                                    } else if(op.stage === 'replied' && currentUserSession.role === 'SUPER') {
-                                        btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow);" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق (سليم)</button>
-                                                <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); sendToBranchManagerFromCallCenter('${id}')">للمدير</button>`;
-                                    } else if(op.stage === 'sent_to_branch_manager' && currentUserSession.title === 'مدير فرع') {
-                                        btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">رد المدير</button>`;
-                                    } else if(op.stage === 'sent_back_to_call_center' && currentUserSession.role === 'SUPER') {
-                                        btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow);" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق (سليم)</button>
-                                                <button class="btn-vip-execute-master" onclick="event.stopPropagation(); sendToRegionalManager('${id}')">إرسال للمنطقة</button>`;
-                                    } else if(op.stage === 'sent_to_regional_manager' && currentUserSession.title === 'مدير المنطقة') {
-                                        btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); openRegionalManagerReplyModalHub('${id}')">رد المنطقة</button>`;
-                                    } else if(op.stage === 'sent_to_regional_manager' && currentUserSession.role === 'SUPER') {
-                                        btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق نهائي</button>`;
+                                const userBranch = currentUserSession.branch;
+                                const userTitle = currentUserSession.title;
+
+                                // جميع الرتب يمكنها الرد والرفع
+                                const canReply = true; // السماح للجميع بالرد
+                                const canEscalate = true; // السماح للجميع بالرفع
+
+                                if (isInteractive && canReply) {
+                                    // زر الرد والاعتماد
+                                    btns += `<button class="btn-vip-execute-master" style="background:#f59e0b; color:black; margin-bottom:5px;"
+                                            onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">
+                                            إضافة رد / اعتماد <i class="fas fa-edit"></i>
+                                            </button>`;
+
+                                    // زر الرفع الديناميكي (فقط للمديرين)
+                                    if (canEscalate) {
+                                        const nextStage = stageHierarchy[op.stage];
+                                        if (nextStage) {
+                                            const nextRankLabel = stageRankNames[nextStage];
+                                            btns += `<button class="btn-vip-execute-master" style="background:#ff6b6b; color:white; margin-bottom:5px;"
+                                                    onclick="event.stopPropagation(); escalateComplaint('${id}')">
+                                                    رفع الشكوى إلى: ${nextRankLabel} <i class="fas fa-arrow-up"></i>
+                                                    </button>`;
+                                        }
                                     }
                                 }
 
-                                if(currentUserSession.role === 'SUPER') btns += `<button class="btn-vip-execute-master" style="background:var(--danger-pulse); margin-top:5px;" onclick="event.stopPropagation(); deleteTicketRecord('${id}')">حذف</button>`;
+                                // زر الحذف للسوبر أدمن
+                                if (currentUserSession.role === 'SUPER') {
+                                    btns += `<button class="btn-vip-execute-master" style="background:#ef4444; margin-top:5px;" onclick="event.stopPropagation(); deleteTicketRecord('${id}')"><i class="fas fa-trash"></i> حذف</button>`;
+                                }
 
-                                const logs = op.logs ? op.logs.map(l => `<div style="font-size:0.8rem; color:#8b949e;">• ${l.user}: ${l.action}</div>`).join('') : '';
+                                // سجل النشاط (الذي يظهر تحت البلاغ)
+                                const logs = op.logs ? op.logs.map(l => `<div style="font-size:0.8rem; color:#8b949e;">• <b>${l.user}</b>: ${l.action}</div>`).join('') : '';
 
                                 return `
                                     <div class="massive-glass-card ticket-visual-unit" onclick="this.classList.toggle('is-fixed')">
-                                        <!-- الجزء الظاهر دائماً -->
                                         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                                             <div>
-                                                <b style="color:var(--gold-master); font-size:1.1rem;">📍 ${op.branch || 'فرع غير معروف'}</b>
-                                                <div style="font-size:0.75rem; color:#8b949e;">${op.date || ''} ${op.timeOnly || ''}</div>
+                                                <b style="color:var(--gold-master); font-size:1.1rem;">📍 ${op.branch}</b>
+                                                <div style="font-size:0.75rem; color:#8b949e;">${op.date} ${op.timeOnly}</div>
                                             </div>
                                             <div style="text-align:left;">
                                                 <span style="color:var(--gold-master); font-size:0.8rem;">رقم الطلب</span>
-                                                <div class="order-number-badge">#${op.order || '000'}</div>
+                                                <div class="order-number-badge">#${op.order}</div>
                                             </div>
                                         </div>
-
-                                        <!-- الجزء المخفي الذي يظهر عند الضغط أو الهافر -->
                                         <div class="ticket-hidden-details">
-                                            <div style="margin-bottom:10px;">
-                                                <div style="font-weight:bold; color:#fff;">👤 العميل: ${op.customer}</div>
-                                                <div style="color:var(--danger-pulse);">🏷️ النوع: ${op.type}</div>
-                                                <div style="color:var(--success-glow);">👨‍✈️ الطيار: ${op.driver || '---'}</div>
+                                            <div style="margin-bottom:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px;">
+                                                <div>👤 العميل: ${op.customer} | 🏷️ النوع: ${op.type}</div>
+                                                <div style="color:var(--gold-master); font-size:0.8rem;">المرحلة: ${op.stage || 'جديد'}</div>
                                             </div>
-                                            <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:5px; margin-bottom:10px; font-size:0.9rem;">
+                                            <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:5px; margin-bottom:10px; font-size:0.9rem; border-right:3px solid var(--gold-master);">
                                                 📝 ${op.msg}
                                             </div>
-                                            <div style="border-top:1px solid #333; padding-top:5px; margin-bottom:10px;">
+                                            <div style="max-height:100px; overflow-y:auto; margin-bottom:10px; border-top:1px solid #333; padding-top:5px;">
                                                 ${logs}
                                             </div>
-                                            <div style="display:grid; grid-template-columns:1fr; gap:5px;">
+                                            <div style="display:flex; flex-direction:column; gap:8px;">
                                                 ${btns}
                                             </div>
-                                        </div>
-
-                                        <div style="position:absolute; bottom:5px; left:50%; transform:translateX(-50%); font-size:0.7rem; color:#444;">
-                                            إضغط للتثبيت
                                         </div>
                                     </div>`;
                             }
@@ -2579,25 +2608,87 @@
 
 
                             // Ticket Action Modals
+                            async function openGenericReplyModal(id, nextStage, actionText) {
+                                const { value: r } = await Swal.fire({
+                                    title: 'رد المراجعة والاعتماد',
+                                    input: 'textarea',
+                                    inputPlaceholder: 'اكتب ملاحظاتك هنا...',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'إرسال للمستوى التالي',
+                                    confirmButtonColor: '#10b981'
+                                });
+
+                                if (r) {
+                                    const op = complaintsCache[id];
+                                    const newLog = {
+                                        time: new Date().toLocaleTimeString('ar-EG'),
+                                        user: currentUserSession.name + " (" + currentUserSession.title + ")",
+                                        action: actionText + ": " + r
+                                    };
+
+                                    await dbHub.ref('operations/' + id).update({
+                                        stage: nextStage,
+                                        logs: [...(op.logs || []), newLog]
+                                    });
+                                    renderSystemToast("تم تحويل البلاغ بنجاح", "success");
+                                }
+                            }
+
+                            // دالة تحديث المرحلة بدون رد (توجيه فقط)
+                            async function updateTicketStage(id, nextStage, actionText) {
+                                const op = complaintsCache[id];
+
+                                // هنا نقوم بدمج الاسم مع الوظيفة (الرول)
+                                const userSignature = `${currentUserSession.name} (${currentUserSession.title})`;
+                                const newLog = {
+                                    time: new Date().toLocaleTimeString('ar-EG'),
+                                    user: userSignature, // سيظهر مثلاً: أحمد (مدير التشغيل)
+                                    action: actionText
+                                };
+
+                                await dbHub.ref('operations/' + id).update({
+                                    stage: nextStage,
+                                    logs: [...(op.logs || []), newLog]
+                                });
+                                renderSystemToast("تم التحديث بواسطة " + currentUserSession.name, "success");
+                            }
+
                             async function openBranchReplyModalHub(id) {
                                 const {value:r} = await Swal.fire({ title:'رد الفرع', html:`<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input" placeholder="التفاصيل"></textarea>`, preConfirm:()=>[document.getElementById('s1').value,document.getElementById('s2').value] });
                                 if(r) {
-                                    const op = complaintsCache[id], log={time:new Date().toLocaleTimeString('ar-EG'),user:currentUserSession.name,action:r[0]==='ناقص'?'اعتراف بالنقص':'الطلب سليم'};
+                                    const op = complaintsCache[id], log={time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:r[0]==='ناقص'?'اعتراف بالنقص':'الطلب سليم'};
                                     await dbHub.ref('operations/'+id).update({ stage:'replied', branch_verdict:r[0], dispatcher_name:currentUserSession.name, logs:[...(op.logs||[]),log], status:r[0]==='ناقص'?'done':'active' });
                                     renderSystemToast("تم الرد", "success");
                                 }
                             }
-                            async function finalizeTicketAndArchive(id) { await dbHub.ref('operations/'+id).update({status:'done', logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:currentUserSession.name,action:"إغلاق نهائي"}]}); renderSystemToast("تمت الأرشفة","success"); }
-                            async function sendToBranchManagerFromCallCenter(id) { await dbHub.ref('operations/'+id).update({stage:'sent_to_branch_manager', logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:currentUserSession.name,action:"إرسال لمدير الفرع"}]}); renderSystemToast("تم التحويل","success"); }
-                            async function sendToRegionalManager(id) { await dbHub.ref('operations/'+id).update({stage:'sent_to_regional_manager', logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:currentUserSession.name,action:"إرسال لمدير المنطقة"}]}); renderSystemToast("تم التحويل","success"); }
+                            async function finalizeTicketAndArchive(id) {
+                                const op = complaintsCache[id];
+                                const userSignature = `${currentUserSession.name} (${currentUserSession.title})`;
+
+                                const newLog = {
+                                    time: new Date().toLocaleTimeString('ar-EG'),
+                                    user: userSignature,
+                                    action: "تم التوصيل النهائي والأرشفة"
+                                };
+
+                                await dbHub.ref('operations/' + id).update({
+                                    status: 'done',
+                                    stage: 'delivered',
+                                    logs: [...(op.logs || []), newLog]
+                                });
+
+                                renderSystemToast("تمت الأرشفة بنجاح", "success");
+                            }
+                            async function sendToBranchManagerFromCallCenter(id) { await dbHub.ref('operations/'+id).update({stage:'sent_to_branch_manager', logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:"إرسال لمدير الفرع"}]}); renderSystemToast("تم التحويل","success"); }
+                            async function sendToRegionalManager(id) { await dbHub.ref('operations/'+id).update({stage:'sent_to_regional_manager', logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:"إرسال لمدير المنطقة"}]}); renderSystemToast("تم التحويل","success"); }
                             async function deleteTicketRecord(id) { if((await Swal.fire({title:'حذف نهائي؟',icon:'warning',showCancelButton:true})).isConfirmed) { await dbHub.ref('operations/'+id).remove(); renderSystemToast("تم الحذف","success"); } }
                             async function openBranchManagerReplyModalHub(id) {
                                 const {value:r} = await Swal.fire({ title:'رد المدير', html:`<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input"></textarea>`, preConfirm:()=>[document.getElementById('s1').value,document.getElementById('s2').value] });
-                                if(r) { await dbHub.ref('operations/'+id).update({stage:'sent_back_to_call_center', branch_manager_verdict:r[0], branch_manager_name:currentUserSession.name, logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:currentUserSession.name,action:'رد المدير: '+r[0]}]}); renderSystemToast("تم الرد","success"); }
+                                if(r) { await dbHub.ref('operations/'+id).update({stage:'sent_back_to_call_center', branch_manager_verdict:r[0], branch_manager_name:currentUserSession.name, logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:'رد المدير: '+r[0]}]}); renderSystemToast("تم الرد","success"); }
                             }
                             async function openRegionalManagerReplyModalHub(id) {
                                 const {value:r} = await Swal.fire({ title:'رد المنطقة', html:`<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input"></textarea>`, preConfirm:()=>[document.getElementById('s1').value,document.getElementById('s2').value] });
-                                if(r) { await dbHub.ref('operations/'+id).update({stage:'sent_to_regional_manager', regional_manager_verdict:r[0], regional_manager_name:currentUserSession.name, logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:currentUserSession.name,action:'رد المنطقة: '+r[0]}]}); renderSystemToast("تم الرد","success"); }
+                                if(r) { await dbHub.ref('operations/'+id).update({stage:'sent_to_regional_manager', regional_manager_verdict:r[0], regional_manager_name:currentUserSession.name, logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:'رد المنطقة: '+r[0]}]}); renderSystemToast("تم الرد","success"); }
                             }
 
                             // وظيفة حذف موظف نهائياً (من الإدارة ومن الرادار)
@@ -2666,6 +2757,59 @@
                                 if (result.isConfirmed) {
                                     await dbHub.ref('access_logs').remove();
                                     renderSystemToast("تم تصفير السجل بنجاح", "success");
+                                }
+                            }
+
+                            // دوال الرفع والخفض للشكاوى
+                            async function escalateComplaint(id) {
+                                const op = complaintsCache[id];
+                                const currentStage = op.stage || 'waiting_review';
+                                const nextStage = stageHierarchy[currentStage];
+                                const nextRankName = stageRankNames[nextStage] || "المستوى الأعلى";
+
+                                if (!nextStage) {
+                                    renderSystemToast("هذا البلاغ في أعلى مستوى بالفعل", "danger");
+                                    return;
+                                }
+
+                                // طلب سبب الرفع
+                                const { value: reason } = await Swal.fire({
+                                    title: `رفع الشكوى إلى ${nextRankName}`,
+                                    input: 'textarea',
+                                    inputLabel: 'ما هو سبب رفع الشكوى للمستوى الأعلى؟',
+                                    inputPlaceholder: 'اكتب التفاصيل هنا...',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'تأكيد الرفع',
+                                    cancelButtonText: 'إلغاء',
+                                    confirmButtonColor: '#ff6b6b'
+                                });
+
+                                if (reason) {
+                                    const userSignature = `${currentUserSession.name} (${currentUserSession.title})`;
+                                    const newLog = {
+                                        time: new Date().toLocaleTimeString('ar-EG'),
+                                        user: userSignature,
+                                        action: `قام بالرفع إلى [${nextRankName}] - السبب: ${reason}`
+                                    };
+
+                                    await dbHub.ref('operations/' + id).update({
+                                        stage: nextStage,
+                                        logs: [...(op.logs || []), newLog]
+                                    });
+
+                                    renderSystemToast(`تم تحويل البلاغ إلى ${nextRankName}`, "success");
+                                    // البلاغ سيختفي تلقائياً من عند المستخدم الحالي بسبب نظام الفلترة في الـ Render
+                                }
+                            }
+
+                            function deescalateComplaint(id) {
+                                const op = complaintsCache[id];
+                                const currentStage = op.stage || 'waiting_review';
+                                const prevStage = reverseStageHierarchy[currentStage];
+                                if (prevStage) {
+                                    updateTicketStage(id, prevStage, 'خفض الشكوى للمستوى الأقل');
+                                } else {
+                                    renderSystemToast("لا يمكن الخفض أكثر", "danger");
                                 }
                             }
 

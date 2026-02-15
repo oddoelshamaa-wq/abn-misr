@@ -2025,28 +2025,32 @@
                                 const userBranch = currentUserSession.branch;
                                 const userTitle = currentUserSession.title;
 
-                                // جميع الرتب يمكنها الرد والرفع
-                                const canReply = true; // السماح للجميع بالرد
-                                const canEscalate = true; // السماح للجميع بالرفع
+                                // داخل دالة generateTicketMarkup
 
-                                if (isInteractive && canReply) {
-                                    // زر الرد والاعتماد
+                                // الحالة 1: إذا كان البلاغ عند المدير (فرع أو منطقة)
+                                if (op.stage === 'sent_to_branch_manager' || op.stage === 'sent_to_regional_manager') {
                                     btns += `<button class="btn-vip-execute-master" style="background:#f59e0b; color:black; margin-bottom:5px;"
                                             onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">
-                                            إضافة رد / اعتماد <i class="fas fa-edit"></i>
+                                            إضافة رد / تأكيد النقص <i class="fas fa-edit"></i>
                                             </button>`;
 
-                                    // زر الرفع الديناميكي (فقط للمديرين)
-                                    if (canEscalate) {
-                                        const nextStage = stageHierarchy[op.stage];
-                                        if (nextStage) {
-                                            const nextRankLabel = stageRankNames[nextStage];
-                                            btns += `<button class="btn-vip-execute-master" style="background:#ff6b6b; color:white; margin-bottom:5px;"
-                                                    onclick="event.stopPropagation(); escalateComplaint('${id}')">
-                                                    رفع الشكوى إلى: ${nextRankLabel} <i class="fas fa-arrow-up"></i>
-                                                    </button>`;
-                                        }
+                                    // زر الرفع للمستوى الأعلى (الذي قمنا بتعديله سابقاً)
+                                    const nextStage = stageHierarchy[op.stage];
+                                    if (nextStage) {
+                                        const nextRankLabel = stageRankNames[nextStage];
+                                        btns += `<button class="btn-vip-execute-master" style="background:#ff6b6b; color:white; margin-bottom:5px;"
+                                                onclick="event.stopPropagation(); escalateComplaint('${id}')">
+                                                رفع الشكوى إلى: ${nextRankLabel} <i class="fas fa-arrow-up"></i>
+                                                </button>`;
                                     }
+                                }
+
+                                // الحالة 2: إذا تم تأكيد النقص (الحالة أصبحت جاهز للتوصيل)
+                                if (op.stage === 'ready_for_delivery') {
+                                    btns += `<button class="btn-vip-execute-master" style="background:#10b981; color:white;"
+                                            onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">
+                                            تم التوصيل النهائي (أرشفة) <i class="fas fa-check-double"></i>
+                                            </button>`;
                                 }
 
                                 // زر الحذف للسوبر أدمن
@@ -2683,8 +2687,47 @@
                             async function sendToRegionalManager(id) { await dbHub.ref('operations/'+id).update({stage:'sent_to_regional_manager', logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:"إرسال لمدير المنطقة"}]}); renderSystemToast("تم التحويل","success"); }
                             async function deleteTicketRecord(id) { if((await Swal.fire({title:'حذف نهائي؟',icon:'warning',showCancelButton:true})).isConfirmed) { await dbHub.ref('operations/'+id).remove(); renderSystemToast("تم الحذف","success"); } }
                             async function openBranchManagerReplyModalHub(id) {
-                                const {value:r} = await Swal.fire({ title:'رد المدير', html:`<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input"></textarea>`, preConfirm:()=>[document.getElementById('s1').value,document.getElementById('s2').value] });
-                                if(r) { await dbHub.ref('operations/'+id).update({stage:'sent_back_to_call_center', branch_manager_verdict:r[0], branch_manager_name:currentUserSession.name, logs:[...(complaintsCache[id].logs||[]),{time:new Date().toLocaleTimeString('ar-EG'),user:`${currentUserSession.name} (${currentUserSession.title})`,action:'رد المدير: '+r[0]}]}); renderSystemToast("تم الرد","success"); }
+                                const { value: r } = await Swal.fire({
+                                    title: 'رد المراجعة والتحقق',
+                                    html: `
+                                        <select id="s1" class="swal2-input">
+                                            <option value="ناقص فعلاً">❌ نقص فعلاً (سيتم التعويض)</option>
+                                            <option value="سليم">✅ الطلب خرج سليماً</option>
+                                        </select>
+                                        <textarea id="s2" class="swal2-input" placeholder="اكتب ملاحظات إضافية..."></textarea>
+                                    `,
+                                    confirmButtonText: 'تأكيد الرد',
+                                    showCancelButton: true,
+                                    preConfirm: () => [
+                                        document.getElementById('s1').value,
+                                        document.getElementById('s2').value
+                                    ]
+                                });
+
+                                if (r) {
+                                    const op = complaintsCache[id];
+                                    const verdict = r[0];
+                                    const notes = r[1];
+
+                                    // إذا كان "ناقص فعلاً"، نغير المرحلة إلى جاهز للتوصيل (تم التعويض)
+                                    // أما إذا كان "سليم"، يمكن إرساله للكول سنتر للمراجعة
+                                    const nextStage = (verdict === 'ناقص فعلاً') ? 'ready_for_delivery' : 'sent_back_to_call_center';
+
+                                    const userSignature = `${currentUserSession.name} (${currentUserSession.title})`;
+                                    const newLog = {
+                                        time: new Date().toLocaleTimeString('ar-EG'),
+                                        user: userSignature,
+                                        action: `النتيجة: ${verdict} - الملاحظات: ${notes}`
+                                    };
+
+                                    await dbHub.ref('operations/' + id).update({
+                                        stage: nextStage,
+                                        branch_manager_verdict: verdict,
+                                        logs: [...(op.logs || []), newLog]
+                                    });
+
+                                    renderSystemToast("تم تحديث حالة البلاغ", "success");
+                                }
                             }
                             async function openRegionalManagerReplyModalHub(id) {
                                 const {value:r} = await Swal.fire({ title:'رد المنطقة', html:`<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input"></textarea>`, preConfirm:()=>[document.getElementById('s1').value,document.getElementById('s2').value] });

@@ -2016,61 +2016,9 @@
                                         });
                                     }
 
-                                    // === UPDATED TICKET MARKUP FOR HOVER REVEAL ===
-                                    function generateTicketMarkup(id, op, isInteractive, p) {
-                                        let btns = "";
-                                        const userTitle = currentUserSession.title;
-                                        const isSuper = (currentUserSession.role === 'SUPER');
-
-                                        // هل المستخدم هو صاحب الصلاحية في المرحلة دي؟
-                                        const isMyTurn = (userTitle === stageOwner[op.stage] || isSuper);
-
-                                        if (isInteractive && isMyTurn) {
-                                            const nextStage = stageHierarchy[op.stage];
-                                            const nextRankLabel = stageRankNames[nextStage];
-
-                                            if (nextStage) {
-                                                btns += `
-                                                    <button class="btn-vip-execute-master" style="background:#3b82f6; color:white; margin-bottom:5px;"
-                                                            onclick="event.stopPropagation(); escalateComplaint('${id}')">
-                                                            <i class="fas fa-share-square"></i> تحويل إلى: ${nextRankLabel}
-                                                    </button>`;
-                                            }
-
-                                            // أزرار الردود
-                                            if (['sent_to_dispatcher', 'sent_to_branch_manager', 'sent_to_regional_manager'].includes(op.stage)) {
-                                                btns += `
-                                                    <button class="btn-vip-execute-master" style="background:#f59e0b; color:black; margin-bottom:5px;"
-                                                            onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">
-                                                            <i class="fas fa-comment-dots"></i> إضافة رد / حسم
-                                                    </button>`;
-                                            }
-
-                                            if (op.stage === 'ready_for_delivery') {
-                                                btns += `
-                                                    <button class="btn-vip-execute-master" style="background:#10b981; color:white;"
-                                                            onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">
-                                                            <i class="fas fa-check-double"></i> تأكيد التوصيل (أرشفة)
-                                                    </button>`;
-                                            }
-                                        } else {
-                                            // لو مش دوره يظهرله النص ده بس
-                                            btns = `<div style="padding:10px; border-radius:8px; background:rgba(255,255,255,0.05); color:#8b949e; text-align:center; font-size:0.8rem;">
-                                                       <i class="fas fa-lock"></i> البلاغ حالياً عند: ${stageRankNames[op.stage] || op.stage}
-                                                    </div>`;
-                                        }
-
-                                        if (currentUserSession.role === 'SUPER') {
-                                            btns += `
-                                                <button class="btn-vip-execute-master" style="background:#6366f1; margin-bottom:5px;"
-                                                        onclick="event.stopPropagation(); forceChangeStage('${id}')">
-                                                        <i class="fas fa-random"></i> تغيير المرحلة يدوياً
-                                                </button>
-                                                <button class="btn-vip-execute-master" style="background:#ef4444;"
-                                                        onclick="event.stopPropagation(); deleteTicketRecord('${id}')">
-                                                        <i class="fas fa-trash"></i> حذف البلاغ
-                                                </button>`;
-                                        }
+                                        // === UPDATED TICKET MARKUP FOR HOVER REVEAL ===
+    function generateTicketMarkup(id, op, isInteractive, p) {
+        let btns = generateDynamicButtons(id, op);
 
                                         // 3. عرض الرد (لو موجود)
                                         let verdictDisplay = "";
@@ -3428,6 +3376,133 @@
 
             // التشغيل
             setTimeout(initLicensingShield, 1500);
+
+            async function addUniversalReply(id) {
+                const { value: replyText } = await Swal.fire({
+                    title: `إضافة رد (بصفتي ${currentUserSession.title})`,
+                    input: 'textarea',
+                    inputPlaceholder: 'اكتب ردك هنا...',
+                    showCancelButton: true,
+                    confirmButtonText: 'إرسال الرد',
+                    cancelButtonText: 'إلغاء',
+                    confirmButtonColor: '#4b5563'
+                });
+
+                if (replyText) {
+                    const op = complaintsCache[id];
+                    const userSignature = `${currentUserSession.name} (${currentUserSession.title})`;
+                    const newLog = {
+                        time: new Date().toLocaleTimeString('ar-EG'),
+                        user: userSignature,
+                        action: `رد عام: ${replyText}`
+                    };
+
+                    await dbHub.ref('operations/' + id).update({
+                        logs: [...(op.logs || []), newLog]
+                    });
+
+                    renderSystemToast("تم إضافة الرد بنجاح", "success");
+                }
+            }
+
+            async function transferTicket(id, targetStage) {
+                const op = complaintsCache[id];
+                const stageNames = {
+                    'sent_to_dispatcher': 'الديسبتشر',
+                    'sent_to_branch_manager': 'مدير الفرع',
+                    'sent_to_regional_manager': 'مدير المنطقة',
+                    'sent_back_to_call_center': 'الكول سنتر'
+                };
+
+                const { value: reason } = await Swal.fire({
+                    title: `تحويل البلاغ إلى ${stageNames[targetStage]}`,
+                    input: 'textarea',
+                    inputLabel: 'اكتب ملاحظة التحويل:',
+                    inputPlaceholder: 'لماذا قمت بتحويل البلاغ؟',
+                    showCancelButton: true,
+                    confirmButtonText: 'تأكيد التحويل'
+                });
+
+                if (reason) {
+                    const userSignature = `${currentUserSession.name} (${currentUserSession.title})`;
+                    const newLog = {
+                        time: new Date().toLocaleTimeString('ar-EG'),
+                        user: userSignature,
+                        action: `قام بالتحويل إلى ${stageNames[targetStage]} - الملاحظة: ${reason}`
+                    };
+
+                    await dbHub.ref('operations/' + id).update({
+                        stage: targetStage,
+                        logs: [...(op.logs || []), newLog]
+                    });
+
+                    renderSystemToast("تم التحويل بنجاح", "success");
+                }
+            }
+
+            // --- وظيفة توليد الزراير بشكل ديناميكي حسب الرتبة ---
+            function generateDynamicButtons(id, op) {
+                let btns = "";
+                const userTitle = currentUserSession.title; // رتبة الشخص اللي فاتح اللوجن دلوقتي
+                const isSuper = (currentUserSession.role === 'SUPER');
+
+                // 1. زرار الرد العام (متاح لكل الناس في أي وقت)
+                btns += `
+                    <button class="btn-vip-execute-master" style="background:#4b5563; color:white; margin-bottom:8px;"
+                            onclick="event.stopPropagation(); addUniversalReply('${id}')">
+                            <i class="fas fa-comment-medical"></i> إضافة رد سريع
+                    </button>`;
+
+                // 2. تخصيص الزراير حسب "مين اللي فاتح اللوجن"
+
+                // --- لو اللي فاتح "كول سنتر" ---
+                if (userTitle === 'كول سنتر' || isSuper) {
+                    if (op.stage === 'sent_back_to_call_center') {
+                        btns += `<button class="btn-vip-execute-master" style="background:#10b981;" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">
+                                <i class="fas fa-check-double"></i> إنهاء وأرشفة (تم الحل)
+                                </button>`;
+                    }
+                    btns += `<button class="btn-vip-execute-master" style="background:#3b82f6;" onclick="event.stopPropagation(); transferTicket('${id}', 'sent_to_dispatcher')">
+                            <i class="fas fa-paper-plane"></i> توجيه للديسبتشر
+                            </button>`;
+                }
+
+                // --- لو اللي فاتح "ديسبتشر" ---
+                if (userTitle === 'ديسبتشر' || isSuper) {
+                    btns += `<button class="btn-vip-execute-master" style="background:#f59e0b; color:black;" onclick="event.stopPropagation(); transferTicket('${id}', 'sent_to_branch_manager')">
+                            <i class="fas fa-arrow-right"></i> تحويل لمدير الفرع
+                            </button>`;
+                    btns += `<button class="btn-vip-execute-master" style="background:#6366f1;" onclick="event.stopPropagation(); transferTicket('${id}', 'sent_back_to_call_center')">
+                            <i class="fas fa-undo"></i> إعادة للكول سنتر
+                            </button>`;
+                }
+
+                // --- لو اللي فاتح "مدير فرع" ---
+                if (userTitle === 'مدير فرع' || isSuper) {
+                    btns += `<button class="btn-vip-execute-master" style="background:#f59e0b; color:black;" onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">
+                            <i class="fas fa-file-signature"></i> الرد النهائي على الشكوى
+                            </button>`;
+                    btns += `<button class="btn-vip-execute-master" style="background:#ef4444;" onclick="event.stopPropagation(); transferTicket('${id}', 'sent_to_regional_manager')">
+                            <i class="fas fa-level-up-alt"></i> تصعيد لمدير المنطقة
+                            </button>`;
+                }
+
+                // --- لو اللي فاتح "مدير منطقة" ---
+                if (userTitle === 'مدير منطقة' || isSuper) {
+                    btns += `<button class="btn-vip-execute-master" style="background:#7c3aed;" onclick="event.stopPropagation(); transferTicket('${id}', 'sent_back_to_call_center')">
+                            <i class="fas fa-check-circle"></i> اعتماد الحل وإرساله للكول سنتر
+                            </button>`;
+                }
+
+                // زرار الحذف (للسوبر أدمن فقط)
+                if (isSuper) {
+                    btns += `<button class="btn-vip-execute-master" style="background:#000; margin-top:10px;" onclick="event.stopPropagation(); deleteTicketRecord('${id}')">
+                            <i class="fas fa-trash"></i> حذف نهائي
+                            </button>`;
+                }
+
+                return btns;
+            }
                             </script>
                         </body>
                     </html>

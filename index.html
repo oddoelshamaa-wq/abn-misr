@@ -3446,14 +3446,7 @@
                 const userTitle = currentUserSession.title; // رتبة الشخص اللي فاتح اللوجن دلوقتي
                 const isSuper = (currentUserSession.role === 'SUPER');
 
-                // 1. زرار الرد العام (متاح لكل الناس في أي وقت)
-                btns += `
-                    <button class="btn-vip-execute-master" style="background:#4b5563; color:white; margin-bottom:8px;"
-                            onclick="event.stopPropagation(); addUniversalReply('${id}')">
-                            <i class="fas fa-comment-medical"></i> إضافة رد سريع
-                    </button>`;
-
-                // 2. تخصيص الزراير حسب "مين اللي فاتح اللوجن"
+                // تخصيص الزراير حسب "مين اللي فاتح اللوجن"
 
                 // --- لو اللي فاتح "كول سنتر" ---
                 if (userTitle === 'كول سنتر' || isSuper) {

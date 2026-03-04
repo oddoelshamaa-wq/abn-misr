@@ -1690,6 +1690,100 @@
             font-weight: 900;
             color: #fbbf24;
         }
+
+        /* تصميم شاشة الدخول الجذاب V47 */
+        #auth-portal-mask {
+            background: radial-gradient(circle at center, #1e293b 0%, #010409 100%);
+            overflow: hidden;
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-glass-box {
+            background: rgba(13, 17, 23, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 30px;
+            padding: 50px 40px;
+            width: 450px;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 158, 11, 0.1);
+            transition: 0.4s;
+            position: relative;
+        }
+
+        .login-glass-box:hover {
+            border-color: var(--gold-master);
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(245, 158, 11, 0.2);
+        }
+
+        .login-logo-circle {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--gold-master), #b45309);
+            margin: -100px auto 30px auto; /* لرفعه للأعلى قليلاً */
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: #000;
+            box-shadow: 0 10px 30px rgba(245, 158, 11, 0.4);
+            border: 5px solid #010409;
+        }
+
+        .login-field-group {
+            position: relative;
+            margin-bottom: 20px;
+            text-align: right;
+        }
+
+        .login-field-group i {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gold-master);
+        }
+
+        .login-input-vip {
+            width: 100%;
+            padding: 15px 45px 15px 15px !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 15px !important;
+            color: #fff !important;
+            font-size: 1rem !important;
+            margin-bottom: 0 !important;
+        }
+
+        .login-input-vip:focus {
+            border-color: var(--gold-master) !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+        }
+
+        /* حركة الاهتزاز عند الخطأ */
+        @keyframes shake-err {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        .shake-it { animation: shake-err 0.4s; border-color: #ef4444 !important; }
+
+        #login-msg-v47 {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            margin-top: 15px;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
     </style>
 </head>
 
@@ -1713,34 +1807,31 @@
     </div>
 
     <!-- Authentication Portal - Updated Premium Look -->
-    <div id="auth-portal-mask">
-        <div class="massive-glass-card login-card-massive" style="border-radius: 25px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(1, 4, 9, 0.9);">
-            <div class="identity-orb-vip" style="margin: 0 auto 20px auto; cursor: default; width: 90px; height: 90px; font-size: 2rem;">CMS</div>
-            <h1 style="color:var(--gold-master); font-weight:950; margin-bottom:10px; letter-spacing: 1px;">IBN MASR V47</h1>
-            <p style="color:var(--text-muted-core); font-weight:600; font-size: 0.9rem; margin-bottom: 30px;">بوابة الدخول الآمنة للمنظومة الرقمية</p>
-            
-            <div style="text-align: right; max-width: 400px; margin: 0 auto;">
-                <label style="display: block; margin-bottom: 8px; color: var(--gold-bright); font-weight: bold;">
-                    <i class="fas fa-user-shield"></i> كود الهوية (UID)
-                </label>
-                <input type="text" id="auth-uid-master" placeholder="أدخل كود المستخدم" 
-                       style="background: rgba(255,255,255,0.05); border: 1px solid #30363d; padding: 15px;">
+    <!-- بوابة الدخول المطورة V47 -->
+<div id="auth-portal-mask">
+    <div class="login-glass-box" id="login-card">
+        <div class="login-logo-circle">CMS</div>
+        
+        <h2 style="color:white; margin-bottom:10px; font-weight:800;">ابن مصر</h2>
+        <p style="color:var(--text-muted-core); font-size:0.9rem; margin-bottom:35px;">نظام إدارة البلاغات والرقابة الذكي</p>
 
-                <label style="display: block; margin-top: 15px; margin-bottom: 8px; color: var(--gold-bright); font-weight: bold;">
-                    <i class="fas fa-lock"></i> الرمز السري (PWD)
-                </label>
-                <input type="password" id="auth-pwd-master" placeholder="••••••••" 
-                       style="background: rgba(255,255,255,0.05); border: 1px solid #30363d; padding: 15px;">
-
-                <button class="btn-vip-execute-master" onclick="runSecurityAuthSequence()" 
-                        style="margin-top: 30px; height: 60px; background: linear-gradient(135deg, #f59e0b, #92400e); color: white; font-size: 1.1rem;">
-                    <i class="fas fa-sign-in-alt"></i> التحقق من الهوية والولوج
-                </button>
-                
-                <p id="login-error-msg" style="color: #ef4444; font-weight: bold; margin-top: 20px; text-align: center; display: none; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 10px; border: 1px solid #ef4444;"></p>
-            </div>
+        <div class="login-field-group">
+            <i class="fas fa-id-badge"></i>
+            <input type="text" id="auth-uid-master" class="login-input-vip" placeholder="كود الهوية (UID)">
         </div>
+
+        <div class="login-field-group">
+            <i class="fas fa-key"></i>
+            <input type="password" id="auth-pwd-master" class="login-input-vip" placeholder="كلمة المرور (PWD)">
+        </div>
+
+        <button class="btn-vip-execute-master" onclick="runSecurityAuthSequence()" style="height: 55px; margin-top: 10px;">
+            دخول النظام <i class="fas fa-chevron-left"></i>
+        </button>
+
+        <div id="login-msg-v47"></div>
     </div>
+</div>
 
     <!-- Main Interface -->
     <div id="main-system-viewport" class="hidden">
@@ -2135,62 +2226,71 @@
         let allAccessLogsCache = []; // لتخزين السجلات مؤقتاً لسرعة الفلترة
         let isFirstLoad = true;
 async function runSecurityAuthSequence() {
-    // 1. فك حظر الصوت (للتنبيهات لاحقاً)
-    const audio = document.getElementById("notification-sound");
-    if (audio) { audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(e => {}); }
-
     const uid = document.getElementById('auth-uid-master').value.trim();
     const pwd = document.getElementById('auth-pwd-master').value.trim();
-    const errorDisplay = document.getElementById('login-error-msg');
+    const loginCard = document.getElementById('login-card');
+    const msgBox = document.getElementById('login-msg-v47');
 
-    // إخفاء رسالة الخطأ عند كل محاولة جديدة
-    errorDisplay.style.display = 'none';
+    // تصفية الحالة قبل البدء
+    loginCard.classList.remove('shake-it');
+    msgBox.style.display = 'none';
 
-    // التأكد من إدخال البيانات
     if (!uid || !pwd) {
-        errorDisplay.innerText = "⚠️ يرجى كتابة كود الهوية وكلمة المرور";
-        errorDisplay.style.display = 'block';
+        showLoginError("⚠️ يرجى إدخال جميع البيانات المطلوبة");
         return;
     }
 
-    // دخول السوبر أدمن (كود خاص)
+    // إظهار تحميل بسيط على الزر
+    renderSystemToast("جاري التحقق...", "info");
+
+    // دخول السوبر (VIP)
     if (uid === 'super' && pwd === 'vip2026') {
-        const adminData = { id: 'super', name: 'Super Administrator', title: 'ROOT-COMMAND', branch: 'ALL', role: 'SUPER' };
-        grantCoreAccess(adminData);
+        grantCoreAccess({ id: 'super', name: 'Super Admin', title: 'المدير العام', branch: 'ALL', role: 'SUPER' });
         return;
     }
 
     try {
-        // البحث عن المستخدم في قاعدة البيانات
         const snap = await dbHub.ref('users/' + uid).once('value');
         const userData = snap.val();
 
         if (!userData) {
-            // الحالة 1: المستخدم غير موجود أصلاً
-            errorDisplay.innerText = "❌ عذراً، كود المستخدم (UID) غير مسجل بالنظام";
-            errorDisplay.style.display = 'block';
-            Swal.fire({ icon: 'error', title: 'خطأ في الهوية', text: 'كود المستخدم الذي أدخلته غير موجود' });
+            // كود المستخدم غلط
+            showLoginError("❌ كود الهوية (UID) غير موجود بالنظام");
             return;
         }
 
         if (userData.pass !== pwd) {
-            // الحالة 2: المستخدم موجود لكن الباسورد غلط
-            errorDisplay.innerText = "🔑 كلمة المرور غير صحيحة، حاول مرة أخرى";
-            errorDisplay.style.display = 'block';
-            Swal.fire({ icon: 'warning', title: 'كلمة مرور خاطئة', text: 'تأكد من كتابة الرمز السري بشكل صحيح' });
+            // الباسورد غلط
+            showLoginError("🔑 كلمة المرور التي أدخلتها خاطئة");
             return;
         }
 
-        // إذا وصل الكود هنا، يعني البيانات صحيحة
-        const dataToSave = { id: uid, ...userData, role: 'USER' };
-        renderSystemToast("جاري تهيئة المنظومة...", "success");
-        grantCoreAccess(dataToSave);
+        // نجاح الدخول
+        renderSystemToast("تم التحقق بنجاح، أهلاً بك!", "success");
+        grantCoreAccess({ id: uid, ...userData, role: 'USER' });
 
     } catch (error) {
-        console.error("Auth Error:", error);
-        errorDisplay.innerText = "🌐 خطأ في الاتصال بالسيرفر";
-        errorDisplay.style.display = 'block';
+        showLoginError("🌐 خطأ في الاتصال بقاعدة البيانات");
     }
+}
+
+// دالة مساعدة لإظهار الخطأ بشكل "شيك"
+function showLoginError(msg) {
+    const loginCard = document.getElementById('login-card');
+    const msgBox = document.getElementById('login-msg-v47');
+    
+    // تفعيل اهتزاز الكارت
+    loginCard.classList.add('shake-it');
+    
+    // إظهار رسالة الخطأ
+    msgBox.innerHTML = msg;
+    msgBox.style.display = 'block';
+    
+    // تنبيه بصوت خفيف أو Toast
+    renderSystemToast(msg, "danger");
+    
+    // إزالة الهزة بعد انتهاء الأنيميشن عشان لو حاول تاني
+    setTimeout(() => loginCard.classList.remove('shake-it'), 500);
 }
         
 

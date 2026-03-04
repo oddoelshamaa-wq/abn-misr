@@ -2088,6 +2088,15 @@
             <option>تواصل من الفرع</option>
             <option>سوشيال</option>
         </select>
+        
+        <!-- حقل جديد: نوع البلاغ (تيك اواي - HD - دين ان) -->
+        <label>نوع البلاغ</label>
+        <select id="f-order-type-sel">
+            <option value="TA">تيك اواي (TA)</option>
+            <option value="HD">HD</option>
+            <option value="Din In">دين ان (Din In)</option>
+        </select>
+        
         <label>الطيار</label><input id="f-driver-name-input" placeholder="اسم الطيار">
         <label>التفاصيل</label><textarea id="f-complaint-msg-input" rows="8"></textarea>
         <button class="btn-vip-execute-master" id="submit-complaint-btn" onclick="runComplaintTicketSequence()">توجيه
@@ -2644,17 +2653,18 @@
             const ord = document.getElementById('f-order-id-input').value.trim();
             const cust = document.getElementById('f-customer-name-input').value.trim();
             const type = document.getElementById('f-complaint-type-sel').value;
+            const orderType = document.getElementById('f-order-type-sel').value;
             const drv = document.getElementById('f-driver-name-input').value.trim();
             const msg = document.getElementById('f-complaint-msg-input').value.trim();
             if (!ord || !cust || !msg) { Swal.fire('تنبيه', 'بيانات ناقصة', 'warning'); return; }
             const timeNow = new Date().toLocaleTimeString('ar-EG');
             const selectedDate = document.getElementById('f-date-master').value;
             const ticketData = {
-                branch: br, order: ord, customer: cust, type: type, msg: msg, driver: drv,
+                branch: br, order: ord, customer: cust, type: type, orderType: orderType, msg: msg, driver: drv,
                 stage: 'waiting_review', status: 'active',
                 timestamp: new Date().toLocaleString('ar-EG'), timeOnly: timeNow, date: selectedDate,
                 author: currentUserSession.name,
-                logs: [{ time: timeNow, user: currentUserSession.name, action: "إنشاء بلاغ" }]
+                logs: [{ time: timeNow, user: currentUserSession.name, action: "إنشاء بلاغ - " + orderType }]
             };
             await dbHub.ref('operations').push(ticketData);
             triggerBranchBroadcast(br, ord, cust, type, msg, timeNow);
@@ -2842,11 +2852,11 @@
                 let brOps = ops.filter(o => o.branch === br);
                 let counts = types.map(t => brOps.filter(o => o.type === t).length);
 
-                // حسابات الإجماليات
-                let taTotal = counts[13] + counts[14]; // تواصل من الفرع + سوشيال
-                let dinInTotal = 0; // يمكنك وضع منطق هنا إذا كان هناك نوع شكوى محدد للـ Din in
+            // حسابات الإجماليات بناءً على orderType (TA, HD, Din In)
+                let taTotal = brOps.filter(o => o.orderType === 'TA').length;
+                let hdTotal = brOps.filter(o => o.orderType === 'HD').length;
+                let dinInTotal = brOps.filter(o => o.orderType === 'Din In').length;
                 let restaurantTotal = brOps.length;
-                let hdTotal = restaurantTotal - taTotal - dinInTotal;
 
                 table1Html += `<tr>
                                     <td style="background:#1e293b; color:#fbbf24; font-weight:bold;">${br}</td>

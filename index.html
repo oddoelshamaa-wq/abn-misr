@@ -1712,19 +1712,32 @@
         </div>
     </div>
 
-    <!-- Authentication Portal -->
+    <!-- Authentication Portal - Updated Premium Look -->
     <div id="auth-portal-mask">
-        <div class="massive-glass-card login-card-massive">
-            <div class="identity-orb-vip" style="margin: 0 auto; cursor: default;">CMS</div>
-            <h1 style="color:var(--gold-master); font-weight:950; margin-bottom:20px;">Ibn Masr CMS V47</h1>
-            <p style="color:var(--text-muted-core); font-weight:900;">نظام الرقابة والتحليل الإحصائي الفائق V47.0</p>
-            <div style="margin-top: 40px;">
-                <label>كود الهوية الرقمية (UID)</label>
-                <input type="text" id="auth-uid-master" placeholder="UID">
-                <label>الرمز السري المشفر (PWD)</label>
-                <input type="password" id="auth-pwd-master" placeholder="PWD">
-                <button class="btn-vip-execute-master" onclick="runSecurityAuthSequence()">ولوج المنظومة الرقمية <i
-                        class="fas fa-shield-halved"></i></button>
+        <div class="massive-glass-card login-card-massive" style="border-radius: 25px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(1, 4, 9, 0.9);">
+            <div class="identity-orb-vip" style="margin: 0 auto 20px auto; cursor: default; width: 90px; height: 90px; font-size: 2rem;">CMS</div>
+            <h1 style="color:var(--gold-master); font-weight:950; margin-bottom:10px; letter-spacing: 1px;">IBN MASR V47</h1>
+            <p style="color:var(--text-muted-core); font-weight:600; font-size: 0.9rem; margin-bottom: 30px;">بوابة الدخول الآمنة للمنظومة الرقمية</p>
+            
+            <div style="text-align: right; max-width: 400px; margin: 0 auto;">
+                <label style="display: block; margin-bottom: 8px; color: var(--gold-bright); font-weight: bold;">
+                    <i class="fas fa-user-shield"></i> كود الهوية (UID)
+                </label>
+                <input type="text" id="auth-uid-master" placeholder="أدخل كود المستخدم" 
+                       style="background: rgba(255,255,255,0.05); border: 1px solid #30363d; padding: 15px;">
+
+                <label style="display: block; margin-top: 15px; margin-bottom: 8px; color: var(--gold-bright); font-weight: bold;">
+                    <i class="fas fa-lock"></i> الرمز السري (PWD)
+                </label>
+                <input type="password" id="auth-pwd-master" placeholder="••••••••" 
+                       style="background: rgba(255,255,255,0.05); border: 1px solid #30363d; padding: 15px;">
+
+                <button class="btn-vip-execute-master" onclick="runSecurityAuthSequence()" 
+                        style="margin-top: 30px; height: 60px; background: linear-gradient(135deg, #f59e0b, #92400e); color: white; font-size: 1.1rem;">
+                    <i class="fas fa-sign-in-alt"></i> التحقق من الهوية والولوج
+                </button>
+                
+                <p id="login-error-msg" style="color: #ef4444; font-weight: bold; margin-top: 20px; text-align: center; display: none; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 10px; border: 1px solid #ef4444;"></p>
             </div>
         </div>
     </div>
@@ -2121,41 +2134,65 @@
         let analyticsTypeChartInstance = null;
         let allAccessLogsCache = []; // لتخزين السجلات مؤقتاً لسرعة الفلترة
         let isFirstLoad = true;
+async function runSecurityAuthSequence() {
+    // 1. فك حظر الصوت (للتنبيهات لاحقاً)
+    const audio = document.getElementById("notification-sound");
+    if (audio) { audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(e => {}); }
 
-        async function runSecurityAuthSequence() {
-            // --- كود جديد لفك حظر الصوت ---
-            const audio = document.getElementById("notification-sound");
-            if (audio) {
-                audio.play().then(() => {
-                    audio.pause();
-                    audio.currentTime = 0;
-                }).catch(e => console.log("Audio permission needed"));
-            }
-            // ----------------------------
+    const uid = document.getElementById('auth-uid-master').value.trim();
+    const pwd = document.getElementById('auth-pwd-master').value.trim();
+    const errorDisplay = document.getElementById('login-error-msg');
 
-            const uid = document.getElementById('auth-uid-master').value.trim();
-            const pwd = document.getElementById('auth-pwd-master').value.trim();
+    // إخفاء رسالة الخطأ عند كل محاولة جديدة
+    errorDisplay.style.display = 'none';
 
-            if (!uid || !pwd) { renderSystemToast("يرجى إدخال البيانات!", "danger"); return; }
+    // التأكد من إدخال البيانات
+    if (!uid || !pwd) {
+        errorDisplay.innerText = "⚠️ يرجى كتابة كود الهوية وكلمة المرور";
+        errorDisplay.style.display = 'block';
+        return;
+    }
 
-            // دخول السوبر أدمن
-            if (uid === 'super' && pwd === 'vip2026') {
-                const adminData = { id: 'super', name: 'Super Administrator', title: 'ROOT-COMMAND', branch: 'ALL', role: 'SUPER' };
-                grantCoreAccess(adminData);
-                return;
-            }
+    // دخول السوبر أدمن (كود خاص)
+    if (uid === 'super' && pwd === 'vip2026') {
+        const adminData = { id: 'super', name: 'Super Administrator', title: 'ROOT-COMMAND', branch: 'ALL', role: 'SUPER' };
+        grantCoreAccess(adminData);
+        return;
+    }
 
-            // التأكد من المستخدم من خلال السيرفر (Firebase)
-            const snap = await dbHub.ref('users/' + uid).once('value');
-            const userData = snap.val();
+    try {
+        // البحث عن المستخدم في قاعدة البيانات
+        const snap = await dbHub.ref('users/' + uid).once('value');
+        const userData = snap.val();
 
-            if (userData && userData.pass === pwd) {
-                const dataToSave = { id: uid, ...userData, role: 'USER' };
-                grantCoreAccess(dataToSave);
-            } else {
-                Swal.fire('خطأ', 'بيانات الدخول غير صحيحة أو غير مسجلة في هذا المتصفح', 'error');
-            }
+        if (!userData) {
+            // الحالة 1: المستخدم غير موجود أصلاً
+            errorDisplay.innerText = "❌ عذراً، كود المستخدم (UID) غير مسجل بالنظام";
+            errorDisplay.style.display = 'block';
+            Swal.fire({ icon: 'error', title: 'خطأ في الهوية', text: 'كود المستخدم الذي أدخلته غير موجود' });
+            return;
         }
+
+        if (userData.pass !== pwd) {
+            // الحالة 2: المستخدم موجود لكن الباسورد غلط
+            errorDisplay.innerText = "🔑 كلمة المرور غير صحيحة، حاول مرة أخرى";
+            errorDisplay.style.display = 'block';
+            Swal.fire({ icon: 'warning', title: 'كلمة مرور خاطئة', text: 'تأكد من كتابة الرمز السري بشكل صحيح' });
+            return;
+        }
+
+        // إذا وصل الكود هنا، يعني البيانات صحيحة
+        const dataToSave = { id: uid, ...userData, role: 'USER' };
+        renderSystemToast("جاري تهيئة المنظومة...", "success");
+        grantCoreAccess(dataToSave);
+
+    } catch (error) {
+        console.error("Auth Error:", error);
+        errorDisplay.innerText = "🌐 خطأ في الاتصال بالسيرفر";
+        errorDisplay.style.display = 'block';
+    }
+}
+        
 
         function grantCoreAccess(data) {
             localStorage.setItem('vip_v43_secure_token', JSON.stringify(data));

@@ -2015,6 +2015,11 @@
                         <h4>معدل الأداء العام</h4>
                         <div class="val" id="kpi-rate" style="color:#10b981;">0%</div>
                     </div>
+                    <div class="card-v3" style="border: 2px solid #06b6d4;">
+                        <h4>متوسط الشيك الإيراد</h4>
+                        <div class="val" id="kpi-avg-check" style="color:#06b6d4;">0</div>
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 5px;">ج.م / طلب</div>
+                    </div>
                 </div>
 
                 <!-- الجدول الكبير (المصفوفة الشاملة) بتصميم زجاجي عائم -->
@@ -2764,6 +2769,10 @@ function showLoginError(msg) {
             const dSnap = await dbHub.ref(`daily_stats/${dateStr}`).get();
             const dailyData = dSnap.val() || {};
 
+            // جلب بيانات الإيراد من Firebase
+            const rSnap = await dbHub.ref(`daily_revenue/${dateStr}`).get();
+            const dailyRevenueData = rSnap.val() || {};
+
             const userBranch = currentUserSession.branch;
             const isMaster = (currentUserSession.role === 'SUPER' || userBranch === 'ALL');
 
@@ -2778,6 +2787,16 @@ function showLoginError(msg) {
                 html += `
                                     <div class="massive-glass-card branch-data-card">
                                         <h4 style="font-size:2.5rem;">${branch}</h4>
+                                        
+                                        <!-- حقل الإيراد -->
+                                        <input type="number" class="massive-daily-input" style="font-size:2rem; color:#10b981;"
+                                               value="${dailyRevenueData[branch] || 0}"
+                                               ${canEdit ? '' : 'disabled'}
+                                               onchange="commitDailyRevenueValue('${dateStr}','${branch}',this.value)"
+                                               placeholder="0">
+                                        <div style="margin-top:10px;color:#10b981;font-weight:bold;">الإيراد (ج.م)</div>
+                                        
+                                        <!-- حقل الأوردرات -->
                                         <input type="number" class="massive-daily-input"
                                                value="${dailyData[branch] || 0}"
                                                ${canEdit ? '' : 'disabled'}
@@ -2792,6 +2811,13 @@ function showLoginError(msg) {
             if (val < 0) { renderSystemToast("خطأ: قيمة سالبة", "danger"); return; }
             await dbHub.ref(`daily_stats/${date}/${br}`).set(val);
             renderSystemToast("تم الحفظ", "success");
+        }
+
+        // دالة حفظ الإيراد اليومي للفرع
+        async function commitDailyRevenueValue(date, br, val) {
+            if (val < 0) { renderSystemToast("خطأ: قيمة سالبة", "danger"); return; }
+            await dbHub.ref(`daily_revenue/${date}/${br}`).set(parseFloat(val));
+            renderSystemToast("تم حفظ الإيراد", "success");
         }
 
         async function runComplaintTicketSequence() {
@@ -2972,6 +2998,11 @@ function showLoginError(msg) {
 
             const dSnap = await dbHub.ref('daily_stats').get();
             const allOrders = dSnap.val() || {};
+            
+            // جلب بيانات الإيراد من Firebase
+            const rSnap = await dbHub.ref('daily_revenue').get();
+            const allRevenue = rSnap.val() || {};
+            
             const ops = Object.values(complaintsCache).filter(o => {
                 // فلتر التاريخ والفرع
                 const matchesDateBranch = o.date >= from && o.date <= to && branchesToProcess.includes(o.branch);
@@ -3050,8 +3081,18 @@ function showLoginError(msg) {
             let totalComps = grandTotals[grandTotals.length - 1];
             let finalPerc = totalOrders > 0 ? ((totalComps / totalOrders) * 100).toFixed(2) : 0;
 
+            // حساب إجمالي الإيراد للفترة المحددة
+            let totalRevenue = 0;
+            branchesToProcess.forEach(br => {
+                Object.keys(allRevenue).forEach(date => {
+                    if (date >= from && date <= to) {
+                        totalRevenue += parseFloat(allRevenue[date][br] || 0);
+                    }
+                });
+            });
+
             // تحديث الـ KPIs بالقيم الحقيقية
-            updateKPIs(totalOrders, totalComps, finalPerc);
+            updateKPIs(totalOrders, totalComps, finalPerc, totalRevenue);
 
             // (ملاحظة: تأكد من استدعاء الجدول الصغير أيضاً إذا كنت تستخدمه)
             renderSmallStatsTable(branchStats);
@@ -3374,10 +3415,13 @@ function showLoginError(msg) {
             });
         }
 
-        function updateKPIs(totalOrders, totalComps, finalPerc) {
+        function updateKPIs(totalOrders, totalComps, finalPerc, totalRevenue) {
             document.getElementById('kpi-total-orders').innerText = totalOrders;
             document.getElementById('kpi-comps').innerText = totalComps;
             document.getElementById('kpi-rate').innerText = finalPerc + '%';
+            // حساب متوسط الشيك الإيراد (إجمالي الإيراد ÷ إجمالي الطلبات)
+            const avgCheck = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;
+            document.getElementById('kpi-avg-check').innerText = avgCheck;
         }
 
         function renderPremiumChart(stats) {

@@ -2846,7 +2846,8 @@ function showLoginError(msg) {
         }
 
         async function triggerBranchBroadcast(br, ord, cust, type, msg, time) {
-            const pList = Object.values((systemSettingsCache.phones && systemSettingsCache.phones[br]) || {});
+const phonesFromStorage = JSON.parse(localStorage.getItem('whatsapp_' + br) || '[]');
+const pList = phonesFromStorage;
             if (pList.length === 0) return;
             const text = `🚨 *بلاغ CMS جديد* 🚨\n\n📍 الفرع: ${br}\n⏰ ${time}\n🔢 الطلب: ${ord}\n👤 العميل: ${cust}\n🏷️ ${type}\n📝 ${msg}\n👷 المتلقي: ${currentUserSession.name}`;
             pList.forEach(ph => {

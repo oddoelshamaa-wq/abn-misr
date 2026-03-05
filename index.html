@@ -3703,10 +3703,11 @@ function showLoginError(msg) {
                 const brOps = ops.filter(o => o.branch === br);
                 const getC = (t) => brOps.filter(o => o.type === t).length;
 
-                const taTotal = getC("سوشيال") + getC("تواصل من الفرع");
-                const dinInTotal = 0; // يمكنك وضع منطق هنا إذا كان هناك نوع شكوى محدد للـ Din in
+                // تصحيح حساب TA/HD/Din In بناءً على حقل orderType (مثل التقرير)
+                const taTotal = brOps.filter(o => o.orderType === 'TA').length;
+                const dinInTotal = brOps.filter(o => o.orderType === 'Din In').length;
+                const hdTotal = brOps.filter(o => o.orderType === 'HD').length;
                 const restaurantTotal = brOps.length;
-                const hdTotal = restaurantTotal - taTotal - dinInTotal;
 
                 const rowData = [br];
                 complaintTypes.forEach(t => rowData.push(getC(t)));

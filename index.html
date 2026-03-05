@@ -2831,15 +2831,18 @@ function showLoginError(msg) {
             if (!box) return;
             box.innerHTML = "";
 
-            // القاعدة الذهبية للعزل:
-            // إذا كان المستخدم "SUPER" أو فرعه هو "ALL"، يتبع الفلتر العلوي.
-            // إذا كان موظف فرع عادي، يرى فرعه فقط إجبارياً.
             const userBranch = currentUserSession.branch;
             const isMasterAdmin = (currentUserSession.role === 'SUPER' || userBranch === 'ALL');
             const selectedFilter = document.getElementById('global-branch-filter').value;
-
-            // فلتر التاريخ للبث المباشر
             const selectedDateFilter = document.getElementById('live-date-filter').value;
+
+            // --- جلب الصلاحيات مع إضافة صلاحية الرد الافتراضية للمدير ---
+            let p = (systemSettingsCache.permissions && systemSettingsCache.permissions[currentUserSession.title]) ? systemSettingsCache.permissions[currentUserSession.title] : {};
+            
+            // إذا كانت الرتبة هي "مدير فرع" ولم يتم تفعيل صلاحية الرد، نقوم بتفعيلها تلقائياً
+            if (currentUserSession.title === 'مدير فرع' && !p.reply_ticket) {
+                p = { ...p, reply_ticket: true };
+            }
 
             let html = '';
             let visibleCount = 0;
@@ -2847,30 +2850,23 @@ function showLoginError(msg) {
                 const op = complaintsCache[id];
                 if (op.status === 'done') return;
 
-                // فلتر التاريخ - إذا تم اختيار يوم محدد
                 if (selectedDateFilter && op.date !== selectedDateFilter) return;
 
                 if (isMasterAdmin) {
-                    // الأدمن يرى ما يختاره من الفلتر
                     if (selectedFilter !== 'ALL' && op.branch !== selectedFilter) return;
                 } else {
-                    // موظف الفرع لا يرى إلا فرعه الخاص المخزن في حسابه
                     if (op.branch !== userBranch) return;
                 }
 
-                html += generateTicketMarkup(id, op, true, {});
+                // --- تمرير الصلاحيات الحقيقية p بدلاً من {} ---
+                html += generateTicketMarkup(id, op, true, p);
                 visibleCount++;
             });
             box.innerHTML = html;
 
-            // تحديث عداد البلاغات المعروضة
             const statsBox = document.getElementById('live-filter-stats');
             if (statsBox) {
-                if (selectedDateFilter) {
-                    statsBox.innerHTML = `<i class="fas fa-info-circle"></i> عدد البلاغات المعروضة: <b style="color:var(--gold-master)">${visibleCount}</b>`;
-                } else {
-                    statsBox.innerHTML = '';
-                }
+                statsBox.innerHTML = selectedDateFilter ? `<i class="fas fa-info-circle"></i> عدد البلاغات: <b style="color:var(--gold-master)">${visibleCount}</b>` : '';
             }
         }
 
@@ -2905,6 +2901,7 @@ function showLoginError(msg) {
                     btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">رد المدير</button>`;
                 } else if (op.stage === 'sent_back_to_call_center' && currentUserSession.role === 'SUPER') {
                     btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow);" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق (سليم)</button>
+                                            <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); sendToRegionalManager('${id}')">إرسال للمنطقة</button>
                                             <button class="btn-vip-execute-master" onclick="event.stopPropagation(); sendToRegionalManager('${id}')">إرسال للمنطقة</button>`;
                 } else if (op.stage === 'sent_to_regional_manager' && currentUserSession.title === 'مدير المنطقة') {
                     btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); openRegionalManagerReplyModalHub('${id}')">رد المنطقة</button>`;
@@ -3659,16 +3656,121 @@ function showLoginError(msg) {
 
         // Ticket Action Modals
         async function openBranchReplyModalHub(id) {
-            const { value: r } = await Swal.fire({ title: 'رد الفرع', html: `<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input" placeholder="التفاصيل"></textarea>`, preConfirm: () => [document.getElementById('s1').value, document.getElementById('s2').value] });
+            // 1. إظهار نافذة SweetAlert2 فيها اختيارات الرد ومكان للتفاصيل
+            const { value: r } = await Swal.fire({
+                title: 'رد الفرع على البلاغ',
+                background: '#0d1117', // لون خلفية داكن (ممكن تغيره)
+                color: '#f0f6fc',
+                html: `
+                    <div style="text-align:right; direction:rtl;">
+                        <label>حالة الطلب:</label>
+                        <select id="s1" class="swal2-input" style="width:100%; margin-bottom:15px;">
+                            <option value="كامل">✅ سليم (الطلب خرج كامل)</option>
+                            <option value="ناقص">❌ ناقص فعلاً (اعتراف بالخطأ)</option>
+                        </select>
+                        <label>تفاصيل إضافية:</label>
+                        <textarea id="s2" class="swal2-input" placeholder="اكتب رد الفرع بالتفصيل هنا..." style="width:100%; height:100px;"></textarea>
+                    </div>`,
+                showCancelButton: true,
+                confirmButtonText: 'إرسال الرد',
+                cancelButtonText: 'إلغاء',
+                confirmButtonColor: '#10b981',
+                preConfirm: () => {
+                    return [
+                        document.getElementById('s1').value,
+                        document.getElementById('s2').value
+                    ]
+                }
+            });
+
+            // 2. إذا ضغط المستخدم على "إرسال"
             if (r) {
-                const op = complaintsCache[id], log = { time: new Date().toLocaleTimeString('ar-EG'), user: currentUserSession.name, action: r[0] === 'ناقص' ? 'اعتراف بالنقص' : 'الطلب سليم' };
-                await dbHub.ref('operations/' + id).update({ stage: 'replied', branch_verdict: r[0], dispatcher_name: currentUserSession.name, logs: [...(op.logs || []), log], status: r[0] === 'ناقص' ? 'done' : 'active' });
-                renderSystemToast("تم الرد", "success");
+                const verdict = r[0]; // حالة الطلب (كامل أو ناقص)
+                const details = r[1]; // التفاصيل
+
+                // جلب بيانات البلاغ الحالية من الكاش (المصفوفة اللي عندك)
+                const op = complaintsCache[id]; 
+                
+                // تجهيز سجل الحركة (Log)
+                const log = {
+                    time: new Date().toLocaleTimeString('ar-EG'),
+                    user: currentUserSession.name, // اسم الموظف اللي بيرد حالياً
+                    action: verdict === 'ناقص' ? 'اعتراف بالنقص: ' + details : 'الطلب سليم: ' + details
+                };
+
+                try {
+                    // 3. تحديث البيانات في الفايربيز
+                    await dbHub.ref('operations/' + id).update({
+                        stage: 'replied',               // تغيير المرحلة لـ "تم الرد"
+                        branch_verdict: verdict,       // حكم الفرع
+                        branch_details: details,       // تفاصيل الرد
+                        dispatcher_name: currentUserSession.name, 
+                        logs: [...(op.logs || []), log], // إضافة اللوج الجديد للقديم
+                        // إذا كان ناقص بيعتبر البلاغ انتهى (done)، لو سليم بيفضل نشط للمراجعة
+                        status: verdict === 'ناقص' ? 'done' : 'active' 
+                    });
+
+                    // إشعار نجاح
+                    Swal.fire('تم!', 'تم إرسال رد الفرع بنجاح', 'success');
+                    
+                } catch (error) {
+                    console.error("خطأ في تحديث الرد:", error);
+                    Swal.fire('خطأ', 'فشل إرسال الرد لقاعدة البيانات', 'error');
+                }
             }
         }
-        async function finalizeTicketAndArchive(id) { await dbHub.ref('operations/' + id).update({ status: 'done', logs: [...(complaintsCache[id].logs || []), { time: new Date().toLocaleTimeString('ar-EG'), user: currentUserSession.name, action: "إغلاق نهائي" }] }); renderSystemToast("تمت الأرشفة", "success"); }
-        async function sendToBranchManagerFromCallCenter(id) { await dbHub.ref('operations/' + id).update({ stage: 'sent_to_branch_manager', logs: [...(complaintsCache[id].logs || []), { time: new Date().toLocaleTimeString('ar-EG'), user: currentUserSession.name, action: "إرسال لمدير الفرع" }] }); renderSystemToast("تم التحويل", "success"); }
-        async function sendToRegionalManager(id) { await dbHub.ref('operations/' + id).update({ stage: 'sent_to_regional_manager', logs: [...(complaintsCache[id].logs || []), { time: new Date().toLocaleTimeString('ar-EG'), user: currentUserSession.name, action: "إرسال لمدير المنطقة" }] }); renderSystemToast("تم التحويل", "success"); }
+        async function finalizeTicketAndArchive(id) {
+            // جلب بيانات الشكوى الحالية من الكاش
+            const op = complaintsCache[id];
+            
+            // تجهيز سجل الحركة (Log)
+            const newLog = {
+                time: new Date().toLocaleTimeString('ar-EG'),
+                user: currentUserSession.name,
+                action: "تمت المراجعة: إغلاق البلاغ (الطلب سليم)"
+            };
+
+            // تحديث قاعدة البيانات
+            await dbHub.ref('operations/' + id).update({
+                status: 'done',            // تحويلها للأرشيف فوراً
+                stage: 'finalized',        // المرحلة النهائية
+                logs: [...(op.logs || []), newLog]
+            });
+
+            renderSystemToast("تم إغلاق البلاغ وأرشفته", "success");
+        }
+        async function sendToBranchManagerFromCallCenter(id) {
+            const op = complaintsCache[id];
+            
+            const newLog = {
+                time: new Date().toLocaleTimeString('ar-EG'),
+                user: currentUserSession.name,
+                action: "عدم قبول رد الفرع: تصعيد لمدير الفرع"
+            };
+
+            await dbHub.ref('operations/' + id).update({
+                stage: 'sent_to_branch_manager', // تغيير المرحلة لتروح للمدير
+                logs: [...(op.logs || []), newLog]
+            });
+
+            renderSystemToast("تم تصعيد البلاغ لمدير الفرع", "warning");
+        }
+        async function sendToRegionalManager(id) {
+            const op = complaintsCache[id];
+            
+            const newLog = {
+                time: new Date().toLocaleTimeString('ar-EG'),
+                user: currentUserSession.name,
+                action: "تصعيد نهائي: إرسال لمدير المنطقة"
+            };
+
+            await dbHub.ref('operations/' + id).update({
+                stage: 'sent_to_regional_manager', // تروح لمدير المنطقة
+                logs: [...(op.logs || []), newLog]
+            });
+
+            renderSystemToast("تم التصعيد لمدير المنطقة", "danger");
+        }
         async function deleteTicketRecord(id) { if ((await Swal.fire({ title: 'حذف نهائي؟', icon: 'warning', showCancelButton: true })).isConfirmed) { await dbHub.ref('operations/' + id).remove(); renderSystemToast("تم الحذف", "success"); } }
         async function openBranchManagerReplyModalHub(id) {
             const { value: r } = await Swal.fire({ title: 'رد المدير', html: `<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input"></textarea>`, preConfirm: () => [document.getElementById('s1').value, document.getElementById('s2').value] });

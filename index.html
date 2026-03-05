@@ -1998,6 +1998,11 @@
                         <h4>اجمالي المطعم</h4>
                         <div class="val" id="kpi-restaurant-total" style="color:#fbbf24;">0</div>
                     </div>
+                    <div class="card-v3" onclick="showEmployeeComplaintsReport()"
+                        style="cursor:pointer; border: 2px solid #8b5cf6;" title="تقرير موظفين">
+                        <h4>تقرير الموظفين</h4>
+                        <div class="val" style="color:#8b5cf6;"><i class="fas fa-users"></i></div>
+                    </div>
                     <div class="card-v3">
                         <h4>إجمالي الأوردرات</h4>
                         <div class="val" id="kpi-total-orders" style="color:#10b981;">0</div>
@@ -3208,6 +3213,88 @@ function showLoginError(msg) {
 
             // إضافة رسالة نجاح
             renderSystemToast(`تم عرض تقرير اجمالي المطعم: ${grandTotal} شكوى`, "success");
+        }
+
+        // دالة تقرير الموظفين -报告显示每个员工创建了多少投诉
+        async function showEmployeeComplaintsReport() {
+            const from = document.getElementById('reports-date-from').value;
+            const to = document.getElementById('reports-date-to').value;
+
+            if (!from || !to) {
+                Swal.fire('تنبيه', 'يرجى تحديد التاريخ أولاً من الأعلى', 'warning');
+                return;
+            }
+
+            // فلترة الشكاوى حسب التاريخ
+            const ops = Object.values(complaintsCache).filter(o =>
+                o.date >= from && o.date <= to && o.author
+            );
+
+            // حساب عدد الشكاوى لكل موظف
+            const employeeCounts = {};
+            ops.forEach(op => {
+                const author = op.author || 'غير معروف';
+                if (!employeeCounts[author]) {
+                    employeeCounts[author] = 0;
+                }
+                employeeCounts[author]++;
+            });
+
+            // تحويل لمصفوفة وترتيبها
+            const employeeArray = Object.keys(employeeCounts).map(name => ({
+                name: name,
+                count: employeeCounts[name]
+            }));
+            employeeArray.sort((a, b) => b.count - a.count);
+
+            const totalComplaints = employeeArray.reduce((sum, emp) => sum + emp.count, 0);
+
+            // إنشاء HTML للجدول
+            let tableHtml = `
+                <div class="glass-table-container floating-3d" style="margin-top: 20px;">
+                    <h3 style="color: #8b5cf6; margin-bottom: 20px; border-right: 4px solid #8b5cf6; padding-right: 10px; text-align: center;">
+                        <i class="fas fa-users"></i> تقرير الموظفين (الشكاوى حسب الموظف)
+                    </h3>
+                    <p style="text-align: center; color: #94a3b8; margin-bottom: 15px;">
+                        الفترة: من ${from} إلى ${to}
+                    </p>
+                    <table class="premium-matrix" style="font-size: 0.9rem;">
+                        <thead>
+                            <tr>
+                                <th style="background: #8b5cf6;">#</th>
+                                <th style="background: #8b5cf6;">اسم الموظف</th>
+                                <th style="background: #7c3aed;">عدد الشكاوى</th>
+                                <th style="background: #8b5cf6;">النسبة</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            employeeArray.forEach((emp, index) => {
+                const percentage = totalComplaints > 0 ? ((emp.count / totalComplaints) * 100).toFixed(1) : 0;
+                const rowColor = index % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)';
+                const countColor = emp.count > 10 ? '#ef4444' : (emp.count > 5 ? '#fbbf24' : '#10b981');
+
+                tableHtml += `
+                    <tr style="background: ${rowColor};">
+                        <td style="font-weight: bold; color: #94a3b8;">${index + 1}</td>
+                        <td style="color: #8b5cf6; font-weight: bold;">${emp.name}</td>
+                        <td style="color: ${countColor}; font-weight: 900; font-size: 1.1rem;">${emp.count}</td>
+                        <td style="font-weight: bold;">${percentage}%</td>
+                    </tr>`;
+            });
+
+            tableHtml += `
+                        <tr style="background: linear-gradient(90deg, #7c3aed, #8b5cf6); color: white; font-weight: 900; font-size: 1.1rem;">
+                            <td colspan="2">الاجمالي</td>
+                            <td>${totalComplaints}</td>
+                            <td>100%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>`;
+
+            document.getElementById('matrix-report-table-container').innerHTML = tableHtml;
+            renderSystemToast(`تم عرض تقرير الموظفين: ${totalComplaints} شكوى`, "success");
         }
 
         // دالة إظهار التقرير المفصل (الكامل)

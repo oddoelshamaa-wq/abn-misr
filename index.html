@@ -1934,9 +1934,9 @@
                             <div style="width:250px;"><input type="date" id="daily-master-date-picker"
                                     style="font-size:1.2rem;" onchange="loadDailySnapshotData()"></div>
                             <button class="btn-vip-execute-master"
-                                style="width:auto; padding:12px 25px; background:linear-gradient(135deg, #10b981, #059669); font-size:1rem;"
-                                onclick="closeDayAndMoveToTomorrow()">
-                                <i class="fas fa-calendar-check"></i> إغلاق اليوم والانتقال للغد
+                                style="width:auto; padding:12px 25px; background:linear-gradient(135deg, #f59e0b, #d97706); font-size:1rem;"
+                                onclick="closeDayManually()">
+                                <i class="fas fa-hand-pointer"></i> إغلاق اليوم يدوي
                             </button>
                         </div>
                     </div>
@@ -2444,8 +2444,7 @@ function showLoginError(msg) {
 
                 initCoreDataListeners(); // تشغيل مراقبة البيانات من Firebase
 
-                // تشغيل نظام إغلاق اليوم التلقائي عند منتصف الليل - تم تعطيله ليكون يدوي فقط
-                // initMidnightAutoClose();
+               
             }
         };
 
@@ -4480,6 +4479,107 @@ const pList = phonesFromStorage;
         // تشغيل الفحص فور تحميل الصفحة
         setTimeout(checkSubscriptionStatus, 2000);
 
+        // دالة إغلاق اليوم يدوياً (بدون الانتقال التلقائي ليوم الغد)
+        async function closeDayManually() {
+            const currentDateStr = document.getElementById('daily-master-date-picker').value;
+
+            if (!currentDateStr) {
+                renderSystemToast("يرجى اختيار تاريخ أولاً", "danger");
+                return;
+            }
+
+            // 1. عرض شاشة تأكيد قبل الإغلاق اليدوي
+            const result = await Swal.fire({
+                title: '⚠️ تأكيد إغلاق اليوم يدوي',
+                html: `
+                            <div style="text-align: right; direction: rtl;">
+                                <p style="color: #fbbf24; font-size: 1.1rem;">سيتم إجراء الآتي:</p>
+                                <ul style="text-align: right; padding-right: 20px;">
+                                    <li>إغلاق جميع البلاغات النشطة لهذا اليوم</li>
+                                    <li>مسح شاشة البث المباشر</li>
+                                    <li>الانتقال سيتم يدوياً من المستخدم</li>
+                                </ul>
+                                <p style="margin-top: 15px; font-weight: bold; color: #ef4444;">تحذير: لا يمكن التراجع عن هذا الإجراء!</p>
+                            </div>
+                        `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#f59e0b',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: '✅ نعم، أغلق اليوم يدوياً',
+                cancelButtonText: '❌ إلغاء',
+                background: '#0d1117',
+                color: '#f0f6fc',
+                allowOutsideClick: false
+            });
+
+            if (!result.isConfirmed) {
+                return; // المستخدم إلغاء الإجراء
+            }
+
+            // 2. إظهار رسالة جاري الإغلاق
+            renderSystemToast("جاري إغلاق اليوم يدوياً...", "warning");
+
+            try {
+                // 3. إغلاق جميع البلاغات النشطة (يدوياً)
+                let closedCount = 0;
+
+                Object.keys(complaintsCache).forEach(id => {
+                    const op = complaintsCache[id];
+                    // إغلاق البلاغات النشطة فقط (الغير مغلقة)
+                    if (op.status !== 'done') {
+                        const closeLog = {
+                            time: new Date().toLocaleTimeString('ar-EG'),
+                            user: currentUserSession.name,
+                            action: "إغلاق يدوي بواسطة: " + currentUserSession.name
+                        };
+
+                        // تحديث البلاغ في Firebase
+                        dbHub.ref('operations/' + id).update({
+                            status: 'done',
+                            closed_by: currentUserSession.name,
+                            closed_at: new Date().toISOString(),
+                            close_method: 'manual',
+                            logs: [...(op.logs || []), closeLog]
+                        });
+                        closedCount++;
+                    }
+                });
+
+                // 4. انتظار لحظتين للتأكد من اكتمال التحديث
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // 5. تحديث الشاشة
+                renderLiveBroadcastMatrix();
+                runArchiveRefreshSequence();
+
+                // 6. إشعار بالنجاح
+                renderSystemToast(`تم إغلاق ${closedCount} بلاغ بنجاح!`, "success");
+                
+                // 7. إظهار رسالة نجاح
+                Swal.fire({
+                    title: '✅ تم الإغلاق بنجاح',
+                    html: `<p style="color: #10b981;">تم إغلاق ${closedCount} بلاغ يدوياً</p>
+                           <p style="color: #94a3b8; margin-top: 10px;">يمكنك الآن اختيار يوم جديد يدوياً من التاريخ</p>`,
+                    icon: 'success',
+                    background: '#0d1117',
+                    color: '#f0f6fc',
+                    confirmButtonColor: '#f59e0b'
+                });
+
+            } catch (error) {
+                console.error("خطأ في إغلاق اليوم:", error);
+                renderSystemToast("حدث خطأ أثناء الإغلاق", "danger");
+                Swal.fire({
+                    title: '❌ خطأ',
+                    text: "فشل في إغلاق اليوم، يرجى المحاولة مرة أخرى",
+                    icon: 'error',
+                    background: '#0d1117',
+                    color: '#f0f6fc'
+                });
+            }
+        }
+
         // دالة إغلاق اليوم والانتقال ليوم الغد مع إغلاق كل البلاغات والبث
         async function closeDayAndMoveToTomorrow() {
             const currentDateStr = document.getElementById('daily-master-date-picker').value;
@@ -4538,9 +4638,6 @@ const pList = phonesFromStorage;
 
                         // تحديث البلاغ في Firebase
                         const updatePromise = dbHub.ref('operations/' + id).update({
-                            status: 'done',
-                            closed_by: currentUserSession.name,
-                            closed_at: currentDateStr,
                             logs: [...(op.logs || []), closeLog]
                         });
                         updatePromises.push(updatePromise);
@@ -4597,7 +4694,8 @@ const pList = phonesFromStorage;
             }
         }
 
-        // دالة إغلاق اليوم التلقائي (تلقائي عند منتصف الليل)
+        // === تم تعطيل إغلاق اليوم التلقائي - الإقفال يكون يدوي فقط ===
+        // دالة إغلاق اليوم التلقائي (تلقائي عند منتصف الليل) - معطلة
         function autoCloseDayAtMidnight() {
             // الحصول على الوقت الحالي
             const now = new Date();

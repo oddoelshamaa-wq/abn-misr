@@ -4477,66 +4477,56 @@ const pList = phonesFromStorage;
         setTimeout(checkSubscriptionStatus, 2000);
 
    // دالة إغلاق اليوم يدوياً (متصلحة)
-        async function closeDayManually() {
-            const dateInput = document.getElementById('live-date-filter');
-            const currentDateStr = dateInput.value || new Date().toISOString().split('T')[0];
+  async function closeDayManually() {
+    const currentDateStr = document.getElementById('daily-master-date-picker').value;
 
-            const result = await Swal.fire({
-                title: '⚠️ تأكيد إغلاق اليوم',
-                text: "بمجرد الإغلاق، سيتم أرشفة بلاغات اليوم وفتح صلاحية الانتقال لتاريخ بكرة.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#10b981',
-                cancelButtonColor: '#ef4444',
-                confirmButtonText: '✅ نعم، أغلق اليوم',
-                cancelButtonText: 'إلغاء'
-            });
+    const result = await Swal.fire({
+        title: 'تأكيد إنهاء يوم العمل',
+        text: `هل تريد إغلاق يوم ${currentDateStr} والبدء في يوم جديد؟`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'نعم، ابدأ يوم جديد',
+        cancelButtonText: 'إلغاء'
+    });
 
-            if (result.isConfirmed) {
-                try {
-                    // 1. إغلاق كافة البلاغات النشطة
-                    Object.keys(complaintsCache).forEach(id => {
-                        const op = complaintsCache[id];
-                        if (op.status !== 'done' && op.date === currentDateStr) {
-                            dbHub.ref('operations/' + id).update({
-                                status: 'done',
-                                stage: 'finalized',
-                                closed_by: currentUserSession.name,
-                                logs: [...(op.logs || []), {
-                                    time: new Date().toLocaleTimeString('ar-EG'),
-                                    user: currentUserSession.name,
-                                    action: "إغلاق يدوي لليوم"
-                                }]
-                            });
-                        }
-                    });
+    if (result.isConfirmed) {
+        renderSystemToast("جاري أرشفة اليوم الحالي...", "warning");
 
-                    // 2. فك قفل التاريخ القادم
-                    const tomorrow = new Date();
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-                    const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-                    const instance = dateInput._flatpickr;
-                    if(instance) {
-                        instance.set("maxDate", tomorrowStr); 
-                        instance.setDate(tomorrowStr);
-                    }
-
-                    Swal.fire({
-                        title: 'تم الإغلاق',
-                        html: '<p style="color: #94a3b8; margin-top: 10px;">يمكنك الآن اختيار يوم جديد يدوياً من التاريخ</p>',
-                        icon: 'success',
-                        background: '#0d1117',
-                        color: '#f0f6fc',
-                        confirmButtonColor: '#f59e0b'
-                    });
-
-                } catch (error) {
-                    console.error("خطأ:", error);
-                    renderSystemToast("حدث خطأ أثناء الإغلاق", "danger");
-                }
+        // 1. إغلاق جميع البلاغات النشطة لهذا التاريخ
+        const updates = {};
+        Object.keys(complaintsCache).forEach(id => {
+            const op = complaintsCache[id];
+            if (op.date === currentDateStr && op.status !== 'done') {
+                updates[`operations/${id}/status`] = 'done';
+                updates[`operations/${id}/logs`] = [...(op.logs || []), {
+                    time: new Date().toLocaleTimeString('ar-EG'),
+                    user: currentUserSession.name,
+                    action: "إغلاق يدوي عند نهاية وردية العمل"
+                }];
             }
-        }
+        });
+
+        await dbHub.ref().update(updates);
+
+        // 2. حساب تاريخ اليوم التالي
+        const current = new Date(currentDateStr);
+        current.setDate(current.getDate() + 1);
+        const nextDay = current.toISOString().split('T')[0];
+
+        // 3. تحديث تاريخ النظام المخزن
+        localStorage.setItem('active_system_date', nextDay);
+        
+        // 4. تحديث الخانات في الشاشة
+        document.getElementById('daily-master-date-picker').value = nextDay;
+        document.getElementById('live-date-filter').value = nextDay;
+
+        // 5. إعادة تحميل البيانات
+        await loadDailySnapshotData();
+        renderLiveBroadcastMatrix();
+
+        Swal.fire('تم الإغلاق', `تم بدء يوم عمل جديد: ${nextDay}`, 'success');
+    }
+}
 
         // دالة إغلاق اليوم والانتقال ليوم الغد (متصلحة)
         async function closeDayAndMoveToTomorrow() {

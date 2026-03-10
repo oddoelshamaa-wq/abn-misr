@@ -2415,7 +2415,7 @@ function showLoginError(msg) {
                 document.getElementById('ui-avatar-orb').innerText = currentUserSession.name.charAt(0);
 
                 // ضبط التواريخ الافتراضية وتفعيل التنسيق (يوم-شهر-سنة)
-                const todayStr = new Date().toISOString().split('T')[0];
+                
                 const dateIds = ['daily-master-date-picker', 'archive-date-from', 'archive-date-to', 'reports-date-from', 'reports-date-to', 'f-date-master', 'live-date-filter', 'log-filter-date'];
 
                 dateIds.forEach(id => {
@@ -4702,7 +4702,10 @@ const pList = phonesFromStorage;
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
-            
+            // حساب الوقت المتبقي حتى منتصف الليل
+            const midnight = new Date(now);
+            midnight.setHours(24, 0, 0, 0);
+            const msUntilMidnight = midnight - now;
 
             // تحويل إلى ساعات ودقائق
             const hoursUntilMidnight = Math.floor(msUntilMidnight / (1000 * 60 * 60));
@@ -4710,7 +4713,11 @@ const pList = phonesFromStorage;
 
             console.log(`نظام إغلاق اليوم التلقائي: يتبقى ${hoursUntilMidnight} ساعة و ${minutesUntilMidnight} دقيقة حتى منتصف الليل`);
 
-            
+            // التحقق إذا كان الوقت بعد منتصف الليل بقليل (تجنب التكرار)
+            if (currentHour === 0 && currentMinute < 5) {
+                // إنهاء اليوم السابق تلقائياً
+                performEndOfDayReset();
+            }
         }
 
         // دالة إجراء إعادة تعيين نهاية اليوم
@@ -4722,7 +4729,14 @@ const pList = phonesFromStorage;
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-               
+                // 2. حفظ سجل إغلاق اليوم
+                await dbHub.ref('system_logs/end_of_day').push({
+                    action: 'إغلاق تلقائي ليوم جديد',
+                    previous_date: yesterdayStr,
+                    new_date: today,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP,
+                    closed_by: 'SYSTEM_AUTO'
+                });
 
                 // 3. تحديث التاريخ في حقل اليومية
                 document.getElementById('daily-master-date-picker').value = today;

@@ -1692,6 +1692,33 @@
             justify-content: center;
         }
 
+        /* تأثير التوهج لشريط فترة السماح */
+        @keyframes grace-glow {
+            0% { background-position: 0% 50%; box-shadow: 0 0 10px #f59e0b; }
+            50% { background-position: 100% 50%; box-shadow: 0 0 25px #fbbf24; }
+            100% { background-position: 0% 50%; box-shadow: 0 0 10px #f59e0b; }
+        }
+
+        .grace-banner-active {
+            background: linear-gradient(-45deg, #f59e0b, #fbbf24, #d97706, #b45309) !important;
+            background-size: 400% 400% !important;
+            animation: grace-glow 3s ease infinite !important;
+            border-bottom: 3px solid #000 !important;
+        }
+
+        .countdown-box {
+            background: rgba(0, 0, 0, 0.85);
+            color: #fbbf24;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-family: 'monospace';
+            font-weight: 900;
+            font-size: 1.1rem;
+            margin: 0 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: inline-block;
+        }
+
         .login-glass-box {
             background: rgba(13, 17, 23, 0.7);
             backdrop-filter: blur(20px);
@@ -2241,54 +2268,80 @@
         let isFirstLoad = true;
         let todayStr = new Date().toISOString().split('T')[0]; // تعريف تاريخ اليوم
 
-async function runSecurityAuthSequence() {
-    const uid = document.getElementById('auth-uid-master').value.trim();
-    const pwd = document.getElementById('auth-pwd-master').value.trim();
-    const loginCard = document.getElementById('login-card');
-    const msgBox = document.getElementById('login-msg-v47');
+        // دالة لضبط التواريخ في كل الخانات بناءً على التاريخ التشغيلي
+        function setupSystemDates() {
+            const dateIds = ['daily-master-date-picker', 'live-date-filter', 'f-date-master'];
+            
+            dateIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    flatpickr(el, {
+                        locale: "ar",
+                        dateFormat: "Y-m-d",
+                        defaultDate: systemOperationalDate,
+                        maxDate: systemOperationalDate, // يمنع اختيار أي تاريخ في المستقبل
+                        allowInput: true
+                    });
+                    el.value = systemOperationalDate;
+                }
+            });
 
-    // تصفية الحالة قبل البدء
-    loginCard.classList.remove('shake-it');
-    msgBox.style.display = 'none';
-
-    if (!uid || !pwd) {
-        showLoginError("⚠️ يرجى إدخال جميع البيانات المطلوبة");
-        return;
-    }
-
-    // إظهار تحميل بسيط على الزر
-    renderSystemToast("جاري التحقق...", "info");
-
-    // دخول السوبر (VIP)
-    if (uid === 'super' && pwd === 'vip2026') {
-        grantCoreAccess({ id: 'super', name: 'Super Admin', title: 'المدير العام', branch: 'ALL', role: 'SUPER' });
-        return;
-    }
-
-    try {
-        const snap = await dbHub.ref('users/' + uid).once('value');
-        const userData = snap.val();
-
-        if (!userData) {
-            // كود المستخدم غلط
-            showLoginError("❌ كود الهوية (UID) غير موجود بالنظام");
-            return;
+            // تواريخ التقارير والأرشيف تظل كما هي (تسمح بالبحث في الماضي)
+            flatpickr(".archive-dates, #reports-date-from, #reports-date-to", {
+                locale: "ar",
+                dateFormat: "Y-m-d",
+                maxDate: systemOperationalDate
+            });
         }
 
-        if (userData.pass !== pwd) {
-            // الباسورد غلط
-            showLoginError("🔑 كلمة المرور التي أدخلتها خاطئة");
-            return;
+        async function runSecurityAuthSequence() {
+            const uid = document.getElementById('auth-uid-master').value.trim();
+            const pwd = document.getElementById('auth-pwd-master').value.trim();
+            const loginCard = document.getElementById('login-card');
+            const msgBox = document.getElementById('login-msg-v47');
+
+            // تصفية الحالة قبل البدء
+            loginCard.classList.remove('shake-it');
+            msgBox.style.display = 'none';
+
+            if (!uid || !pwd) {
+                showLoginError("⚠️ يرجى إدخال جميع البيانات المطلوبة");
+                return;
+            }
+
+            // إظهار تحميل بسيط على الزر
+            renderSystemToast("جاري التحقق...", "info");
+
+            // دخول السوبر (VIP)
+            if (uid === 'super' && pwd === 'vip2026') {
+                grantCoreAccess({ id: 'super', name: 'Super Admin', title: 'المدير العام', branch: 'ALL', role: 'SUPER' });
+                return;
+            }
+
+            try {
+                const snap = await dbHub.ref('users/' + uid).once('value');
+                const userData = snap.val();
+
+                if (!userData) {
+                    // كود المستخدم غلط
+                    showLoginError("❌ كود الهوية (UID) غير موجود بالنظام");
+                    return;
+                }
+
+                if (userData.pass !== pwd) {
+                    // الباسورد غلط
+                    showLoginError("🔑 كلمة المرور التي أدخلتها خاطئة");
+                    return;
+                }
+
+                // نجاح الدخول
+                renderSystemToast("تم التحقق بنجاح، أهلاً بك!", "success");
+                grantCoreAccess({ id: uid, ...userData, role: 'USER' });
+
+            } catch (error) {
+                showLoginError("🌐 خطأ في الاتصال بقاعدة البيانات");
+            }
         }
-
-        // نجاح الدخول
-        renderSystemToast("تم التحقق بنجاح، أهلاً بك!", "success");
-        grantCoreAccess({ id: uid, ...userData, role: 'USER' });
-
-    } catch (error) {
-        showLoginError("🌐 خطأ في الاتصال بقاعدة البيانات");
-    }
-}
 
 // دالة مساعدة لإظهار الخطأ بشكل "شيك"
 function showLoginError(msg) {
@@ -2406,42 +2459,36 @@ function showLoginError(msg) {
             });
         }
 
-        window.onload = () => {
+        window.onload = async () => {
             const sess = localStorage.getItem('vip_v43_secure_token');
             if (sess) {
                 currentUserSession = JSON.parse(sess);
+                
+                // 1. جلب تاريخ النظام من السيرفر أولاً قبل أي شيء
+                const dateSnap = await dbHub.ref('settings/system_date').get();
+                systemOperationalDate = dateSnap.val();
+
+                // إذا لم يوجد تاريخ مخزن (أول مرة)، نضع تاريخ اليوم الفعلي
+                if (!systemOperationalDate) {
+                    systemOperationalDate = new Date().toISOString().split('T')[0];
+                    await dbHub.ref('settings/system_date').set(systemOperationalDate);
+                }
+
+                // 2. إظهار الواجهة
                 document.getElementById('auth-portal-mask').classList.add('hidden');
                 document.getElementById('main-system-viewport').classList.remove('hidden');
                 document.getElementById('ui-user-fullname').innerText = currentUserSession.name;
                 document.getElementById('ui-user-rank-label').innerText = currentUserSession.title;
                 document.getElementById('ui-avatar-orb').innerText = currentUserSession.name.charAt(0);
 
-                const dateIds = ['daily-master-date-picker', 'archive-date-from', 'archive-date-to', 'reports-date-from', 'reports-date-to', 'f-date-master', 'live-date-filter', 'log-filter-date'];
+                // 3. تهيئة الفلاتر والتواريخ بناءً على تاريخ النظام التشغيلي
+                setupSystemDates();
 
-                dateIds.forEach(id => {
-    flatpickr(`#${id}`, {
-        locale: "ar",
-        dateFormat: "Y-m-d",
-        defaultDate: "today",
-        maxDate: "today", 
-        allowInput: true
-    });
-});
-
-                // تحديث البيانات من localStorage
+                // بقية الدوال العادية
                 branchListCache = JSON.parse(localStorage.getItem('branches') || '[]');
-                systemSettingsCache.custom_ranks = JSON.parse(localStorage.getItem('custom_ranks') || '{}');
-                systemSettingsCache.permissions = JSON.parse(localStorage.getItem('permissions') || '{}');
-
                 syncUiDropdownSelections();
-                renderAdminBranchScrollBox();
-                renderAdminUsersScrollBox();
-
-                runPermissionShieldCheck(); // تشغيل الصلاحيات
-
-                initCoreDataListeners(); // تشغيل مراقبة البيانات من Firebase
-
-               
+                runPermissionShieldCheck();
+                initCoreDataListeners(); 
             }
         };
 
@@ -2588,6 +2635,9 @@ function showLoginError(msg) {
             });
         }
 
+        // متغير عالمي لتخزين تاريخ النظام التشغيلي
+        let systemOperationalDate = ""; 
+
         // === وظيفة بروفايل الموظف (عرض التايم لاين الخاص به) ===
         async function viewUserProfileActivity(uid, userName) {
             // إظهار رسالة جاري التحميل
@@ -2718,8 +2768,21 @@ function showLoginError(msg) {
             }
         }
 
-        function initCoreDataListeners() {
+function initCoreDataListeners() {
             console.log("بدء مراقبة البيانات من Firebase...");
+
+            // مراقبة تاريخ النظام للتحديث الفوري عند الجميع
+            dbHub.ref('settings/system_date').on('value', snap => {
+                const newDate = snap.val();
+                if (newDate && newDate !== systemOperationalDate) {
+                    systemOperationalDate = newDate;
+                    // تنبيه المستخدم أن التاريخ تغير
+                    renderSystemToast("تم تغيير تاريخ العمل إلى: " + newDate, "info");
+                    // إعادة تهيئة الفلاتر والواجهة
+                    setupSystemDates(); 
+                    refreshAllModulesData();
+                }
+            });
 
             // مراقبة الإعدادات (الفروع والرتب)
             dbHub.ref('settings').on('value', snap => {
@@ -4416,7 +4479,7 @@ const pList = phonesFromStorage;
             counterElement.innerText = totalComplaints;
         }
 
-        // --- كود حماية التراخيص والاشتراك V47 ---
+        // --- كود حماية التراخيص والاشتراك V47 المطور مع العداد ---
         const checkSubscriptionStatus = () => {
             dbHub.ref('config').on('value', (snap) => {
                 const config = snap.val() || {};
@@ -4424,107 +4487,140 @@ const pList = phonesFromStorage;
                 const expiryDate = config.expiryDate || 0;
                 const graceDays = config.graceDays || 0;
                 const graceMs = graceDays * 24 * 60 * 60 * 1000;
+                const deadline = expiryDate + graceMs; // الموعد النهائي (تاريخ الانتهاء + فترة السماح)
                 const reason = config.reason || "يرجى التواصل مع الإدارة للتجديد.";
 
-                // حساب هل النظام مقفل؟ (تاريخ الانتهاء + فترة السماح)
-                const isExpired = now > (expiryDate + graceMs);
+                // 1. حالة القفل التام (بعد انتهاء فترة السماح أو قفل يدوي)
+                const isExpired = now > deadline;
                 const isLocked = config.manualLocked || isExpired;
 
                 if (isLocked) {
-                    // إظهار شاشة القفل ومنع الدخول
+                    // إخفاء شريط التحذير إذا كان موجوداً وإظهار شاشة القفل التام
+                    if (document.getElementById('grace-warning-banner')) document.getElementById('grace-warning-banner').remove();
                     showLockOverlay(reason, expiryDate);
-                } else {
-                    // إزالة شاشة القفل إذا تم التجديد
-                    const overlay = document.getElementById('subscription-lock-overlay');
-                    if (overlay) overlay.remove();
+                } 
+                // 2. حالة "فترة السماح" (النظام يعمل ولكن المهلة بدأت)
+                else if (now > expiryDate) {
+                    showGraceWarningBanner(deadline);
+                }
+                // 3. حالة الاشتراك ساري
+                else {
+                    const banner = document.getElementById('grace-warning-banner');
+                    if (banner) banner.remove();
                 }
             });
         };
 
-        function showLockOverlay(msg, exp) {
-            // منع تكرار الشاشة
-            if (document.getElementById('subscription-lock-overlay')) return;
+        // دالة إظهار شريط التحذير والعداد التنازلي
+        function showGraceWarningBanner(deadline) {
+            let banner = document.getElementById('grace-warning-banner');
+            
+            // إذا لم يكن الشريط موجوداً، قم بإنشائه
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'grace-warning-banner';
+                banner.style = `
+                    position: fixed; top: 0; left: 0; width: 100%; 
+                    background: linear-gradient(90deg, #f59e0b, #d97706); 
+                    color: #000; z-index: 11000; text-align: center; 
+                    padding: 10px; font-weight: 900; font-family: 'Cairo', sans-serif;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.3); border-bottom: 2px solid #000;
+                    display: flex; justify-content: center; align-items: center; gap: 15px;
+                `;
+                document.body.prepend(banner);
+                // إضافة هامش للموقع حتى لا يختفي المحتوى تحت الشريط
+                document.body.style.paddingTop = "45px";
+            }
 
-            const div = document.createElement('div');
-            div.id = 'subscription-lock-overlay';
-            div.style = `
-        position: fixed; inset: 0; background: #0f172a; z-index: 100000;
-        display: flex; align-items: center; justify-content: center;
-        flex-direction: column; text-align: center; color: white; font-family: 'Cairo', sans-serif;
-        padding: 20px;
-    `;
+            // تحديث العداد كل ثانية
+            const updateTimer = () => {
+                const now = Date.now();
+                const timeLeft = deadline - now;
 
-            const dateStr = exp ? new Date(exp).toLocaleDateString('ar-EG') : "غير محدد";
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    location.reload(); // إعادة التحميل للقفل التام
+                    return;
+                }
 
-            div.innerHTML = `
-        <div style="background: #1e293b; padding: 40px; border-radius: 20px; border: 2px solid #ef4444; max-width: 500px; box-shadow: 0 0 50px rgba(239, 68, 68, 0.3);">
-            <i class="fas fa-file-invoice-dollar" style="font-size: 5rem; color: #ef4444; margin-bottom: 20px;"></i>
-            <h1 style="font-size: 2rem; margin-bottom: 10px;">عذراً، النظام متوقف!</h1>
-            <p style="color: #94a3b8; margin-bottom: 20px;">انتهت صلاحية اشتراك هذا النظام بتاريخ: <br> <b style="color:white">${dateStr}</b></p>
+                const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
 
-            <div style="background: #0f172a; padding: 20px; border-radius: 10px; border-right: 4px solid #fbbf24; margin-bottom: 25px;">
-                <p style="color: #fbbf24; font-weight: bold; margin-bottom: 5px;">تعليمات التجديد:</p>
-                <p style="font-size: 1.2rem;">${msg}</p>
-            </div>
+                banner.innerHTML = `
+                    <i class="fas fa-exclamation-triangle fa-beat"></i>
+                    <span>تنبيه: انتهى الاشتراك الأساسي. فترة السماح تنتهي خلال: 
+                        <span style="background:#000; color:#fbbf24; padding:2px 8px; border-radius:5px; margin:0 5px; font-family:monospace;">
+                            ${days}ي ${hours}س ${minutes}د ${seconds}ث
+                        </span>
+                    </span>
+                    <button onclick="window.open('https://wa.me/201021434151')" style="background:#000; color:#fff; border:none; padding:3px 10px; border-radius:5px; cursor:pointer; font-size:0.8rem; font-weight:bold;">تجديد الآن</button>
+                `;
+            };
 
-            <p style="font-size: 0.9rem; color: #64748b;">برجاء إرسال صورة التحويل لتفعيل النظام فوراً.</p>
-        </div>
-    `;
-            document.body.appendChild(div);
+            const timerInterval = setInterval(updateTimer, 1000);
+            updateTimer(); // تشغيل فوري أول مرة
         }
 
-        // تشغيل الفحص فور تحميل الصفحة
-        setTimeout(checkSubscriptionStatus, 2000);
 
    // دالة إغلاق اليوم يدوياً (متصلحة)
-  async function closeDayManually() {
-    const currentDateStr = document.getElementById('daily-master-date-picker').value;
+async function closeDayManually() {
+    // التأكد من الصلاحية
+    if (currentUserSession.role !== 'SUPER' && !systemSettingsCache.permissions[currentUserSession.title]?.daily_edit) {
+        renderSystemToast("ليس لديك صلاحية إغلاق اليوم", "danger");
+        return;
+    }
 
     const result = await Swal.fire({
-        title: 'تأكيد إنهاء يوم العمل',
-        text: `هل تريد إغلاق يوم ${currentDateStr} والبدء في يوم جديد؟`,
+        title: 'تأكيد إغلاق اليوم التشغيلي',
+        text: `هل أنت متأكد من إنهاء يوم ${systemOperationalDate} والانتقال لليوم التالي؟`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: 'نعم، ابدأ يوم جديد',
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'نعم، انقل التاريخ للغد',
         cancelButtonText: 'إلغاء'
     });
 
     if (result.isConfirmed) {
-        renderSystemToast("جاري أرشفة اليوم الحالي...", "warning");
+        renderSystemToast("جاري أرشفة البيانات وتحديث التاريخ...", "warning");
 
-        // 1. إغلاق جميع البلاغات النشطة لهذا التاريخ
-        const updates = {};
-        Object.keys(complaintsCache).forEach(id => {
-            const op = complaintsCache[id];
-            if (op.date === currentDateStr && op.status !== 'done') {
-                updates[`operations/${id}/status`] = 'done';
-                updates[`operations/${id}/logs`] = [...(op.logs || []), {
-                    time: new Date().toLocaleTimeString('ar-EG'),
-                    user: currentUserSession.name,
-                    action: "إغلاق يدوي عند نهاية وردية العمل"
-                }];
-            }
-        });
+        // 1. حساب التاريخ الجديد (اليوم التالي)
+        let d = new Date(systemOperationalDate);
+        d.setDate(d.getDate() + 1);
+        const nextDayStr = d.toISOString().split('T')[0];
 
-        await dbHub.ref().update(updates);
+        try {
+            // 2. تحديث التاريخ على السيرفر (Firebase)
+            await dbHub.ref('settings/system_date').set(nextDayStr);
 
-        // 2. حساب تاريخ اليوم التالي
-        const current = new Date(currentDateStr);
-        current.setDate(current.getDate() + 1);
-        const nextDay = current.toISOString().split('T')[0];
+            // 3. (اختياري) إغلاق كل البلاغات المفتوحة في اليوم المنتهي
+            const updates = {};
+            Object.keys(complaintsCache).forEach(id => {
+                if (complaintsCache[id].date === systemOperationalDate && complaintsCache[id].status !== 'done') {
+                    updates[`operations/${id}/status`] = 'done';
+                    updates[`operations/${id}/logs`] = [...(complaintsCache[id].logs || []), {
+                        time: new Date().toLocaleTimeString('ar-EG'),
+                        user: currentUserSession.name,
+                        action: "إغلاق تلقائي بسبب إغلاق اليوم يدوياً"
+                    }];
+                }
+            });
+            if (Object.keys(updates).length > 0) await dbHub.ref().update(updates);
 
-        // 3. تحديث تاريخ النظام المخزن
-        localStorage.setItem('active_system_date', nextDay);
-        
-        // 4. تحديث الخانات في الشاشة
-        document.getElementById('daily-master-date-picker').value = nextDay;
-        document.getElementById('live-date-filter').value = nextDay;
+            // 4. إعادة تحميل الصفحة لكل المستخدمين ليعتمدوا التاريخ الجديد
+            Swal.fire({
+                title: 'تم الإغلاق بنجاح',
+                text: `التاريخ الحالي للنظام أصبح: ${nextDayStr}`,
+                icon: 'success',
+                confirmButtonText: 'تحديث النظام الآن'
+            }).then(() => {
+                location.reload(); 
+            });
 
-        // 5. إعادة تحميل البيانات
-        await loadDailySnapshotData();
-        renderLiveBroadcastMatrix();
-
-        Swal.fire('تم الإغلاق', `تم بدء يوم عمل جديد: ${nextDay}`, 'success');
+        } catch (e) {
+            renderSystemToast("حدث خطأ أثناء التحديث", "danger");
+        }
     }
 }
 

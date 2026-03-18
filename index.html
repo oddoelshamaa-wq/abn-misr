@@ -393,18 +393,6 @@
             display: none;
         }
 
-        /*
-            ============================================================
-            --- VIP COMPACT MODE (إصلاح الحجم الضخم) ---
-            ============================================================
-            */
-
-        :root {
-            /* تصغير القائمة الجانبية لتوفير مساحة للعرض */
-            --sidebar-width: 240px;
-            --radius-massive: 12px;
-            --transition-speed: 0.2s;
-        }
 
         body {
             /* تصغير الخط العام للموقع */
@@ -1020,223 +1008,6 @@
             }
         }
 
-        /*
-            ============================================================
-            --- VIP COMPACT MODE (إصلاح الحجم الضخم) ---
-            ============================================================
-            */
-
-        :root {
-            /* تصغير القائمة الجانبية لتوفير مساحة للعرض */
-            --sidebar-width: 240px;
-            --radius-massive: 12px;
-            --transition-speed: 0.2s;
-        }
-
-        body {
-            /* تصغير الخط العام للموقع */
-            font-size: 13px;
-        }
-
-        /* --- القائمة الجانبية (تصغير كلي) --- */
-        .system-side-nav {
-            width: var(--sidebar-width);
-            padding: 15px 10px;
-            top: 15px;
-            right: 15px;
-            bottom: 15px;
-        }
-
-        .identity-orb-vip {
-            width: 60px;
-            height: 60px;
-            /* تصغير الأفاتار من 110px */
-            font-size: 1.5rem;
-            border-width: 3px;
-            margin-bottom: 10px;
-        }
-
-        .identity-labels h2 {
-            font-size: 1rem;
-        }
-
-        .identity-labels span {
-            font-size: 0.75rem;
-        }
-
-        .nav-link-vip {
-            padding: 10px 12px;
-            font-size: 0.85rem;
-            gap: 10px;
-            border-radius: 10px;
-            margin-bottom: 5px;
-        }
-
-        /* --- المحتوى الرئيسي --- */
-        .vip-master-container {
-            margin-right: calc(var(--sidebar-width) + 30px);
-            margin-left: 15px;
-            padding-top: 15px;
-        }
-
-        h1 {
-            font-size: 1.6rem !important;
-            margin-bottom: 15px !important;
-        }
-
-        /* --- البث الحي (تحويله لشبكة كروت صغيرة بجانب بعضها) --- */
-        #render-live-feed-matrix {
-            display: grid;
-            /* يظهر 3 أو 4 بلاغات في السطر الواحد */
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 12px;
-        }
-
-        .ticket-visual-unit {
-            padding: 12px 15px;
-            height: 100px;
-            /* تقليل الارتفاع جداً */
-            margin-bottom: 0;
-            border-right-width: 6px;
-            background: #0d1117;
-            border-radius: 10px;
-            transition: 0.3s;
-        }
-
-        /* توسيع الكارت عند الوقوف عليه لرؤية التفاصيل */
-        .ticket-visual-unit:hover {
-            height: auto;
-            min-height: 100px;
-            z-index: 100;
-        }
-
-        /* تصغير النصوص داخل البلاغ */
-        .ticket-visual-unit b {
-            font-size: 1rem !important;
-        }
-
-        /* اسم الفرع */
-        .ticket-visual-unit div {
-            font-size: 0.75rem;
-        }
-
-        /* التاريخ والوقت */
-
-        /* تصغير رقم الأوردر الضخم */
-        .ticket-visual-unit div[style*="font-size: 3rem"],
-        .ticket-visual-unit div[style*="font-size: 5rem"] {
-            font-size: 1.4rem !important;
-            font-weight: 900;
-            margin: 5px 0 !important;
-        }
-
-        /* --- تصغير الخانات والأزرار --- */
-        input,
-        select,
-        textarea {
-            padding: 8px 12px;
-            font-size: 0.85rem;
-            margin-bottom: 10px;
-            border-radius: 8px;
-        }
-
-        .btn-vip-execute-master {
-            padding: 10px;
-            font-size: 0.95rem;
-            border-radius: 10px;
-        }
-
-        /* تصغير الزر العائم */
-        .floating-action-master {
-            width: 55px;
-            height: 55px;
-            font-size: 1.5rem;
-            bottom: 20px;
-            left: 20px;
-        }
-
-        /* --- تصغير كروت التقارير واليومية --- */
-        .analytics-pill-card {
-            padding: 20px;
-        }
-
-        .analytics-pill-card h2 {
-            font-size: 1.8rem;
-        }
-
-        .branch-data-card {
-            padding: 20px;
-        }
-
-        .massive-daily-input {
-            font-size: 2.5rem;
-            /* تصغير رقم اليومية الضخم */
-        }
-
-        /* تنسيق شاشة الإنذار */
-        .alarm-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(220, 38, 38, 0.85);
-            /* لون أحمر شفاف قليلاً */
-            z-index: 10000;
-            /* فوق كل شيء */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(10px);
-            animation: flashRed 1s infinite;
-            /* وميض مستمر */
-        }
-
-        /* حركة الوميض */
-        @keyframes flashRed {
-            0% {
-                background-color: rgba(220, 38, 38, 0.85);
-                box-shadow: inset 0 0 0 0 red;
-            }
-
-            50% {
-                background-color: rgba(185, 28, 28, 0.95);
-                box-shadow: inset 0 0 100px 50px #ff0000;
-            }
-
-            100% {
-                background-color: rgba(220, 38, 38, 0.85);
-                box-shadow: inset 0 0 0 0 red;
-            }
-        }
-
-        .alarm-content {
-            text-align: center;
-            color: white;
-            background: #000;
-            padding: 40px;
-            border-radius: 20px;
-            border: 4px solid #fca5a5;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
-        }
-
-        .btn-stop-alarm {
-            background: #fff;
-            color: #dc2626;
-            border: none;
-            padding: 15px 40px;
-            font-size: 1.5rem;
-            font-weight: 900;
-            border-radius: 50px;
-            cursor: pointer;
-            margin-top: 20px;
-            transition: 0.2s;
-        }
-
-        .btn-stop-alarm:hover {
-            transform: scale(1.1);
-            box-shadow: 0 0 20px #fff;
-        }
 
         /* تصميم الحاوية الكبرى للتقارير */
         .reports-premium-container {
@@ -1692,32 +1463,39 @@
             justify-content: center;
         }
 
-        /* تأثير التوهج لشريط فترة السماح */
-        @keyframes grace-glow {
-            0% { background-position: 0% 50%; box-shadow: 0 0 10px #f59e0b; }
-            50% { background-position: 100% 50%; box-shadow: 0 0 25px #fbbf24; }
-            100% { background-position: 0% 50%; box-shadow: 0 0 10px #f59e0b; }
-        }
+.countdown-box {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-family: 'monospace';
+    font-weight: 900;
+    font-size: 1.1rem;
+    min-width: 45px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+}
 
-        .grace-banner-active {
-            background: linear-gradient(-45deg, #f59e0b, #fbbf24, #d97706, #b45309) !important;
-            background-size: 400% 400% !important;
-            animation: grace-glow 3s ease infinite !important;
-            border-bottom: 3px solid #000 !important;
-        }
+.countdown-box small {
+    font-size: 0.6rem;
+    color: #fbbf24;
+    margin-top: 2px;
+}
 
-        .countdown-box {
-            background: rgba(0, 0, 0, 0.85);
-            color: #fbbf24;
-            padding: 4px 12px;
-            border-radius: 8px;
-            font-family: 'monospace';
-            font-weight: 900;
-            font-size: 1.1rem;
-            margin: 0 10px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            display: inline-block;
-        }
+.grace-banner-active {
+    background: linear-gradient(90deg, #d97706, #f59e0b, #d97706);
+    background-size: 200% auto;
+    animation: grace-glow 3s linear infinite;
+}
+
+@keyframes grace-glow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
 
         .login-glass-box {
             background: rgba(13, 17, 23, 0.7);
@@ -1800,6 +1578,46 @@
             font-size: 0.85rem;
             margin-top: 15px;
             border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* تصميم شريط فترة السماح */
+        .grace-period-banner {
+            background: linear-gradient(90deg, #f59e0b, #78350f);
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            position: sticky;
+            top: 0;
+            z-index: 5000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .grace-period-banner i {
+            animation: pulse-warning 1.5s infinite;
+        }
+
+        @keyframes pulse-warning {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* علامة صغيرة بجانب الاسم في القائمة الجانبية */
+        .badge-grace {
+            background: #f59e0b;
+            color: #000;
+            font-size: 0.6rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 5px;
+            vertical-align: middle;
         }
     </style>
 </head>
@@ -2489,6 +2307,9 @@ function showLoginError(msg) {
                 syncUiDropdownSelections();
                 runPermissionShieldCheck();
                 initCoreDataListeners(); 
+                
+                // استدعاء فحص الاشتراك في نهاية window.onload كما مطلوب
+                checkSubscriptionStatus();
             }
         };
 
@@ -4479,58 +4300,123 @@ const pList = phonesFromStorage;
             counterElement.innerText = totalComplaints;
         }
 
-        // --- كود حماية التراخيص والاشتراك V47 المطور مع العداد ---
-        const checkSubscriptionStatus = () => {
-            dbHub.ref('config').on('value', (snap) => {
-                const config = snap.val() || {};
-                const now = Date.now();
-                const expiryDate = config.expiryDate || 0;
-                const graceDays = config.graceDays || 0;
-                const graceMs = graceDays * 24 * 60 * 60 * 1000;
-                const deadline = expiryDate + graceMs; // الموعد النهائي (تاريخ الانتهاء + فترة السماح)
-                const reason = config.reason || "يرجى التواصل مع الإدارة للتجديد.";
+const checkSubscriptionStatus = () => {
+    dbHub.ref('config').on('value', (snap) => {
+        const config = snap.val() || {};
+        const now = Date.now();
+        const expiryDate = config.expiryDate || 0;
+        const graceDays = config.graceDays || 0;
+        const graceMs = graceDays * 24 * 60 * 60 * 1000;
+        const deadline = expiryDate + graceMs;
+        const reason = config.reason || "انتهت صلاحية الترخيص، يرجى التواصل مع الإدارة.";
 
-                // 1. حالة القفل التام (بعد انتهاء فترة السماح أو قفل يدوي)
-                const isExpired = now > deadline;
-                const isLocked = config.manualLocked || isExpired;
+        // إزالة أي شريط قديم قبل الفحص
+        const oldBanner = document.getElementById('grace-banner-ui');
+        if (oldBanner) oldBanner.remove();
 
-                if (isLocked) {
-                    // إخفاء شريط التحذير إذا كان موجوداً وإظهار شاشة القفل التام
-                    if (document.getElementById('grace-warning-banner')) document.getElementById('grace-warning-banner').remove();
-                    showLockOverlay(reason, expiryDate);
-                } 
-                // 2. حالة "فترة السماح" (النظام يعمل ولكن المهلة بدأت)
-                else if (now > expiryDate) {
-                    showGraceWarningBanner(deadline);
-                }
-                // 3. حالة الاشتراك ساري
-                else {
-                    const banner = document.getElementById('grace-warning-banner');
-                    if (banner) banner.remove();
-                }
-            });
-        };
+        // 1. حالة القفل التام
+        if (config.manualLocked || now > deadline) {
+            showLockOverlay(reason);
+            return;
+        }
 
-        // دالة إظهار شريط التحذير والعداد التنازلي
-        function showGraceWarningBanner(deadline) {
-            let banner = document.getElementById('grace-warning-banner');
-            
-            // إذا لم يكن الشريط موجوداً، قم بإنشائه
-            if (!banner) {
-                banner = document.createElement('div');
-                banner.id = 'grace-warning-banner';
-                banner.style = `
-                    position: fixed; top: 0; left: 0; width: 100%; 
-                    background: linear-gradient(90deg, #f59e0b, #d97706); 
-                    color: #000; z-index: 11000; text-align: center; 
-                    padding: 10px; font-weight: 900; font-family: 'Cairo', sans-serif;
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.3); border-bottom: 2px solid #000;
-                    display: flex; justify-content: center; align-items: center; gap: 15px;
-                `;
-                document.body.prepend(banner);
+        // 2. حالة فترة السماح (انتهى الاشتراك ولكن لم ينتهِ وقت السماح)
+        if (now > expiryDate && now <= deadline) {
+            injectGraceUI(deadline);
+        }
+    });
+};
+
+// دالة حقن واجهة فترة السماح في الموقع
+// دالة حقن واجهة فترة السماح المطورة V47
+function injectGraceUI(deadline) {
+    // 1. التأكد من عدم تكرار الشريط
+    let banner = document.getElementById('grace-banner-ui');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'grace-banner-ui';
+        banner.className = 'grace-period-banner grace-banner-active';
+        document.body.prepend(banner);
+        document.body.style.paddingTop = "50px"; 
+    }
+    
+    // 2. محرك العداد التنازلي المحدث
+    const updateCountdown = () => {
+        const now = Date.now();
+        const timeLeft = deadline - now;
+
+        if (timeLeft <= 0) {
+            location.reload(); 
+            return;
+        }
+
+        // الحسابات التفصيلية
+        const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+        // التصميم الجديد للعداد بصناديق منفصلة
+        banner.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 15px; width: 100%; justify-content: center;">
+                <i class="fas fa-exclamation-triangle fa-beat"></i>
+                <span style="font-weight: 800; font-size: 0.85rem;">تنبيه: أنت في فترة السماح، يرجى التجديد لضمان استمرار الخدمة</span>
+                
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <div class="countdown-box">${days}<small>يوم</small></div>
+                    <div class="countdown-box">${hours}<small>ساعة</small></div>
+                    <div class="countdown-box">${mins}<small>د</small></div>
+                    <div class="countdown-box">${secs}<small>ث</small></div>
+                </div>
+
+                <button onclick="window.open('https://wa.me/201021434151')" 
+                        style="background:#000; color:#fbbf24; border:1px solid #fbbf24; padding:4px 12px; border-radius:8px; cursor:pointer; font-weight:900; font-size:0.75rem;">
+                    تجديد الآن
+                </button>
+            </div>
+        `;
+    };
+
+    // تشغيل العداد وتحديثه كل ثانية
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    // إضافة شارة فترة السماح بجانب الاسم
+    const nameLabel = document.getElementById('ui-user-fullname');
+    if (nameLabel && !document.getElementById('grace-badge')) {
+        nameLabel.innerHTML += ` <span id="grace-badge" class="badge-grace">فترة سماح</span>`;
+    }
+}
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    // إضافة كلمة "فترة سماح" بجانب اسم المستخدم في القائمة الجانبية
+    const nameLabel = document.getElementById('ui-user-fullname');
+    if (nameLabel && !document.getElementById('grace-badge')) {
+        nameLabel.innerHTML += ` <span id="grace-badge" class="badge-grace">فترة سماح</span>`;
+    }
+    
+    // تغيير لون الأيقونة التعريفية للبرتقالي
+    const avatar = document.getElementById('ui-avatar-orb');
+    if (avatar) {
+        avatar.style.background = 'linear-gradient(135deg, #f59e0b, #b45309)';
+        avatar.style.boxShadow = '0 0 15px #f59e0b';
+    }
+
+
+// دالة شاشة القفل التام
+function showLockOverlay(msg) {
+    document.body.innerHTML = `
+        <div style="height:100vh; background:#000; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-family:'Cairo';">
+            <i class="fas fa-lock" style="font-size:5rem; color:#ef4444; margin-bottom:20px;"></i>
+            <h1 style="font-size:3rem; color:#ef4444;">النظام متوقف</h1>
+            <p style="font-size:1.5rem; max-width:600px; margin:20px;">${msg}</p>
+            <a href="https://wa.me/201021434151" style="background:#25d366; color:#fff; padding:15px 40px; border-radius:50px; text-decoration:none; font-weight:bold; font-size:1.2rem;">تواصل مع الدعم الفني للتفعيل</a>
+        </div>
+    `;
+}
                 // إضافة هامش للموقع حتى لا يختفي المحتوى تحت الشريط
                 document.body.style.paddingTop = "45px";
-            }
 
             // تحديث العداد كل ثانية
             const updateTimer = () => {
@@ -4561,7 +4447,7 @@ const pList = phonesFromStorage;
 
             const timerInterval = setInterval(updateTimer, 1000);
             updateTimer(); // تشغيل فوري أول مرة
-        }
+        
 
 
    // دالة إغلاق اليوم يدوياً (متصلحة)

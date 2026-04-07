@@ -3602,41 +3602,66 @@ if (currentUserSession.role === 'SUPER') {
             });
         }
 
-        function renderComplaintTypesPieChart(ops) {
-            const ctx = document.getElementById('complaint-types-pie-canvas').getContext('2d');
-            const typeCounts = {};
-            ops.forEach(o => { typeCounts[o.type || 'أخرى'] = (typeCounts[o.type || 'أخرى'] || 0) + 1; });
+       function renderComplaintTypesPieChart(ops) {
+    const ctx = document.getElementById('complaint-types-pie-canvas').getContext('2d');
+    const typeCounts = {};
 
-            if (window.pieChart) window.pieChart.destroy();
-            window.pieChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: Object.keys(typeCounts),
-                    datasets: [{
-                        data: Object.values(typeCounts),
-                        backgroundColor: ['#f59e0b', '#ef4444', '#10b981', '#1d4ed8', '#8b5cf6', '#f97316', '#06b6d4'],
-                        borderWidth: 2,
-                        borderColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: '#fff' } },
-                        datalabels: {
-                            color: '#fff',
-                            formatter: (value, context) => {
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = ((value / total) * 100).toFixed(1);
-                                return percentage + '%';
-                            }
-                        }
-                    }
-                },
-                plugins: [ChartDataLabels]
-            });
+    // 1. تحديد هل المستخدم الحالي إدارة أم فرع؟
+    const isMasterAdmin = (currentUserSession.role === 'SUPER' || currentUserSession.branch === 'ALL');
+
+    // 2. فلترة البيانات بناءً على الصلاحية
+    const filteredOps = ops.filter(o => {
+        const isNotValue = (o.noValue === true || o.stage === 'no_value' || o.type === 'نوت فاليو');
+        
+        if (isMasterAdmin) {
+            // الإدارة ترى كل شيء بما في ذلك نوت فاليو
+            return true; 
+        } else {
+            // الفروع لا ترى نوت فاليو نهائياً
+            return !isNotValue; 
         }
+    });
+
+    // 3. تجميع الأعداد للرسم
+    filteredOps.forEach(o => { 
+        let typeName = o.type || 'أخرى';
+        // إذا كان البلاغ "نوت فاليو" نضمن تسميته بوضوح في الرسم للإدارة
+        if (o.noValue === true || o.stage === 'no_value') typeName = 'نوت فاليو';
+        
+        typeCounts[typeName] = (typeCounts[typeName] || 0) + 1; 
+    });
+
+    if (window.pieChart) window.pieChart.destroy();
+    window.pieChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: Object.keys(typeCounts),
+            datasets: [{
+                data: Object.values(typeCounts),
+                // تم إضافة اللون الرمادي (Slate) لتمييز "نوت فاليو" في الرسم
+                backgroundColor: ['#f59e0b', '#ef4444', '#10b981', '#1d4ed8', '#8b5cf6', '#f97316', '#64748b', '#06b6d4'],
+                borderWidth: 2,
+                borderColor: '#0f172a'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#fff' } },
+                datalabels: {
+                    color: '#fff',
+                    formatter: (value, context) => {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return percentage + '%';
+                    }
+                }
+            }
+        },
+        plugins: [ChartDataLabels]
+    });
+}
 
         function updateKPIs(totalOrders, totalComps, finalPerc, totalRevenue) {
             document.getElementById('kpi-total-orders').innerText = totalOrders;

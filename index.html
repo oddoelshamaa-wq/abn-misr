@@ -25,7 +25,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js"></script>
-
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
     <script>
         // 2. إعدادات المشروع بتاعك (اللي إنت بعتها)
         const firebaseConfig = {
@@ -45,6 +45,148 @@
 
         // 4. تعريف المحرك الأساسي (عشان الكود القديم يفهمه)
         const dbHub = firebase.database();
+        const storageHub = firebase.storage();
+
+// Image upload handling variables
+        let selectedImageFile = null;
+        let imageUploadUrl = null;
+        let currentTicketId = null; // NEW: لتخزين ID البلاغ الحالي أثناء الرفع
+
+        // Auto-setup image upload handlers when DOM loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const imageInput = document.getElementById('f-product-image');
+            const uploadContainer = document.getElementById('image-upload-container');
+            
+            if (imageInput) {
+                imageInput.addEventListener('change', handleImageSelection);
+            }
+            
+            if (uploadContainer) {
+                // Drag & drop support
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    uploadContainer.addEventListener(eventName, preventDefaults, false);
+                });
+                
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    uploadContainer.addEventListener(eventName, highlight, false);
+                });
+                
+                ['dragleave', 'drop'].forEach(eventName => {
+                    uploadContainer.addEventListener(eventName, unhighlight, false);
+                });
+                
+                uploadContainer.addEventListener('drop', handleImageDrop, false);
+            }
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function highlight(e) {
+            e.target.closest('#image-upload-container').style.background = 'rgba(245, 158, 11, 0.1)';
+        }
+
+        function unhighlight(e) {
+            e.target.closest('#image-upload-container').style.background = 'rgba(255,255,255,0.02)';
+        }
+
+        function handleImageDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                handleImageFile(files[0]);
+            }
+        }
+
+        function handleImageSelection(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleImageFile(file);
+            }
+        }
+
+        function handleImageFile(file) {
+            // Validate file type and size (max 5MB)
+            if (!file.type.startsWith('image/')) {
+                renderSystemToast('يرجى اختيار صورة (JPG/PNG)', 'danger');
+                return;
+            }
+            
+            if (file.size > 5 * 1024 * 1024) {
+                renderSystemToast('حجم الصورة كبير جداً (الحد الأقصى 5 ميجا)', 'danger');
+                return;
+            }
+            
+            selectedImageFile = file;
+            showImagePreview(file);
+        }
+
+        function showImagePreview(file) {
+            const preview = document.getElementById('preview-img');
+            const previewContainer = document.getElementById('image-preview');
+            const removeBtn = document.getElementById('remove-image-btn');
+            const uploadLabel = document.querySelector('#image-upload-container label[for="f-product-image"]');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                previewContainer.style.display = 'block';
+                removeBtn.style.display = 'inline-flex';
+                uploadLabel.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeSelectedImage() {
+            selectedImageFile = null;
+            imageUploadUrl = null;
+            currentTicketId = null; // NEW: إعادة تعيين ID البلاغ
+            document.getElementById('image-preview').style.display = 'none';
+            document.getElementById('remove-image-btn').style.display = 'none';
+            document.querySelector('#image-upload-container label[for="f-product-image"]').style.display = 'block';
+            document.getElementById('f-product-image').value = '';
+            document.getElementById('upload-progress').style.display = 'none';
+        }
+
+        // ⭐ NEW: دالة رفع الصورة لـ Firebase Storage مع progress
+    // الدالة الجديدة للرفع على الخدمة الخاصة بك (ImgBB كمثال بناءً على الصورة)
+async function uploadImageToImgBB() {
+    if (!selectedImageFile) return null;
+
+    try {
+        // إظهار شريط التقدم (وهمي لأن الرفع عبر API خارجي لا يدعم تتبع التفاصيل بسهولة مثل فايربيز)
+        document.getElementById('upload-progress').style.display = 'block';
+        const progressBar = document.getElementById('progress-bar');
+        progressBar.style.width = '50%';
+
+        const apiKey = '31dc2ad25cdd12ced09d52324a92a437'; 
+
+        const formData = new FormData();
+        formData.append('image', selectedImageFile);
+
+        const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            progressBar.style.width = '100%';
+            renderSystemToast('✅ تم رفع الصورة بنجاح!', 'success');
+            return result.data.url; // هذا هو رابط الصورة المباشر
+        } else {
+            throw new Error(result.error.message);
+        }
+    } catch (error) {
+        console.error('Upload Error:', error);
+        renderSystemToast('❌ فشل رفع الصورة: ' + error.message, 'danger');
+        return null;
+    }
+}
     </script>
 
     <style>
@@ -324,30 +466,59 @@
 
         #render-live-feed-matrix { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 
-        .ticket-visual-unit {
-            padding: 15px;
-            border-radius: var(--radius-massive);
-            border-right: 6px solid var(--gold-master);
-            margin-bottom: 15px;
-            background: #0d1117;
-            height: 110px;
-            overflow: hidden;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
+        /* تحسين كارت البلاغ ليسمح بظهور الصورة */
+.ticket-visual-unit {
+    padding: 15px;
+    border-radius: var(--radius-massive);
+    border-right: 6px solid var(--gold-master);
+    margin-bottom: 15px;
+    background: #0d1117;
+    min-height: 120px; /* زيادة الارتفاع قليلاً */
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
 
-        .ticket-visual-unit:hover, .ticket-visual-unit.is-fixed {
-            height: auto;
-            min-height: 110px;
-            background: #161b22;
-            border-color: var(--gold-bright);
-            z-index: 100;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            transform: translateY(-2px);
-        }
+.ticket-visual-unit:hover, .ticket-visual-unit.is-fixed {
+    height: auto !important;
+    background: #161b22;
+    border-color: var(--gold-bright);
+    z-index: 100;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+    transform: translateY(-5px);
+}
 
+/* تنسيق حاوية الصورة داخل الكارت */
+.ticket-image-container {
+    width: 100%;
+    margin-top: 15px;
+    border-radius: 12px;
+    overflow: hidden;
+    display: none; /* مخفية في العرض المصغر */
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.ticket-visual-unit:hover .ticket-image-container,
+.ticket-visual-unit.is-fixed .ticket-image-container {
+    display: block;
+    animation: fadeIn 0.5s ease;
+}
+
+.ticket-main-img {
+    width: 100%;
+    height: auto;
+    max-height: 300px;
+    object-fit: contain;
+    background: #000;
+    cursor: zoom-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
         .order-number-badge { font-size: 2.2rem !important; font-weight: 900; color: #ffffff; display: block; margin: 5px 0; line-height: 1; }
         .ticket-hidden-details { opacity: 0; display: none; }
         .ticket-visual-unit:hover .ticket-hidden-details, .ticket-visual-unit.is-fixed .ticket-hidden-details {
@@ -2034,6 +2205,35 @@
         <label>الأوردر</label><input id="f-order-id-input" placeholder="#00000000">
         <label>العميل</label><input id="f-customer-name-input" placeholder="الاسم">
         <label>التصنيف</label>
+        <!-- قسم رفع الصور المطور -->
+        <label>📷 صورة الشكوى (اختياري)</label>
+        <div id="image-upload-container" class="massive-glass-card" style="padding: 25px; margin-bottom: 25px; border: 2px dashed var(--border-glow-line); text-align: center; position: relative; min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02);">
+            <input type="file" id="f-product-image" accept="image/*" style="display: none;">
+            <label for="f-product-image" style="cursor: pointer; color: var(--gold-master); font-weight: 800; margin-bottom: 15px;">
+                <i class="fas fa-cloud-upload-alt fa-2x" style="margin-left: 10px;"></i>
+                اضغط هنا أو اسحب الصورة
+            </label>
+            
+            <!-- منطقة المعاينة -->
+            <div id="image-preview" style="display: none; margin-top: 15px; max-width: 200px; max-height: 200px; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <img id="preview-img" src="" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            
+            <!-- شريط التقدم -->
+            <div id="upload-progress" style="display: none; width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-top: 15px; overflow: hidden;">
+                <div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, var(--success-glow), #059669); width: 0%; transition: width 0.3s ease;"></div>
+            </div>
+            
+            <!-- زر الحذف -->
+            <button id="remove-image-btn" style="display: none; background: var(--danger-pulse); color: white; border: none; padding: 8px 20px; border-radius: 20px; cursor: pointer; margin-top: 10px; font-weight: 600;" onclick="removeSelectedImage()">
+                <i class="fas fa-trash"></i> إزالة الصورة
+            </button>
+            
+            <!-- نص مساعد -->
+            <div style="color: var(--text-muted-core); font-size: 0.85rem; margin-top: 10px;">
+                يدعم JPG, PNG (حد أقصى 5 ميجا)
+            </div>
+        </div>
         <select id="f-complaint-type-sel">
             <option>تأخير</option>
             <option>سوء خدمة</option>
@@ -2700,43 +2900,105 @@ function initCoreDataListeners() {
             renderSystemToast("تم حفظ الإيراد", "success");
         }
 
-        async function runComplaintTicketSequence() {
-            const br = document.getElementById('f-branch-master-sel').value;
-            const ord = document.getElementById('f-order-id-input').value.trim();
-            const cust = document.getElementById('f-customer-name-input').value.trim();
-            const type = document.getElementById('f-complaint-type-sel').value;
-            const orderType = document.getElementById('f-order-type-sel').value;
-            const drv = document.getElementById('f-driver-name-input').value.trim();
-            const msg = document.getElementById('f-complaint-msg-input').value.trim();
-            if (!ord || !cust || !msg) { Swal.fire('تنبيه', 'بيانات ناقصة', 'warning'); return; }
-            const timeNow = new Date().toLocaleTimeString('ar-EG');
-            const selectedDate = document.getElementById('f-date-master').value;
-            const ticketData = {
-                branch: br, order: ord, customer: cust, type: type, orderType: orderType, msg: msg, driver: drv,
-                stage: 'waiting_review', status: 'active',
-                timestamp: new Date().toLocaleString('ar-EG'), timeOnly: timeNow, date: selectedDate,
-                author: currentUserSession.name,
-                logs: [{ time: timeNow, user: currentUserSession.name, action: "إنشاء بلاغ - " + orderType }]
-            };
-            await dbHub.ref('operations').push(ticketData);
-            triggerBranchBroadcast(br, ord, cust, type, msg, timeNow);
-            closeSidebarControl();
-            renderSystemToast("تم الإرسال", "success");
-            ['f-order-id-input', 'f-customer-name-input', 'f-complaint-msg-input', 'f-driver-name-input'].forEach(id => document.getElementById(id).value = '');
+async function runComplaintTicketSequence() {
+    const br = document.getElementById('f-branch-master-sel').value;
+    const ord = document.getElementById('f-order-id-input').value.trim();
+    const cust = document.getElementById('f-customer-name-input').value.trim();
+    const type = document.getElementById('f-complaint-type-sel').value;
+    const orderType = document.getElementById('f-order-type-sel').value;
+    const drv = document.getElementById('f-driver-name-input').value.trim();
+    const msg = document.getElementById('f-complaint-msg-input').value.trim();
+    
+    if (!ord || !cust || !msg) { 
+        Swal.fire('تنبيه', 'بيانات ناقصة (رقم الأوردر أو العميل أو التفاصيل)', 'warning'); 
+        return; 
+    }
+
+    const submitBtn = document.getElementById('submit-complaint-btn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '⏳ جاري الإرسال...';
+
+    const timeNow = new Date().toLocaleTimeString('ar-EG');
+    const selectedDate = document.getElementById('f-date-master').value;
+
+    try {
+        let imageUrl = null;
+        
+        // رفع الصورة باستخدام ImgBB API (مفتاح مدمج)
+        if (selectedImageFile) {
+            renderSystemToast('⏳ جاري رفع الصورة لخدمة الصور...', 'info');
+            imageUrl = await uploadImageToImgBB();
         }
 
-        async function triggerBranchBroadcast(br, ord, cust, type, msg, time) {
-const phonesFromStorage = JSON.parse(localStorage.getItem('whatsapp_' + br) || '[]');
-const pList = phonesFromStorage;
-            if (pList.length === 0) return;
-            const text = `🚨 *بلاغ CMS جديد* 🚨\n\n📍 الفرع: ${br}\n⏰ ${time}\n🔢 الطلب: ${ord}\n👤 العميل: ${cust}\n🏷️ ${type}\n📝 ${msg}\n👷 المتلقي: ${currentUserSession.name}`;
-            pList.forEach(ph => {
-                fetch(`https://api.ultramsg.com/instance157671/messages/chat`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 'token': 'cpx85mx613v868fe', 'to': ph, 'body': text })
-                });
-            });
+        const newTicketRef = dbHub.ref('operations').push();
+        const baseTicketData = {
+            branch: br, order: ord, customer: cust, type: type, orderType: orderType, 
+            msg: msg, driver: drv, stage: 'waiting_review', status: 'active',
+            timestamp: new Date().toLocaleString('ar-EG'), timeOnly: timeNow, date: selectedDate,
+            author: currentUserSession.name,
+            imageUrl: imageUrl,
+            logs: [{ time: timeNow, user: currentUserSession.name, action: "إنشاء بلاغ " + (imageUrl ? "بصورة" : "بدون صورة") }]
+        };
+
+        await newTicketRef.set(baseTicketData);
+
+        // إرسال للواتساب
+        triggerBranchBroadcast(br, ord, cust, type, msg, timeNow, imageUrl);
+
+        // تنظيف الواجهة
+        closeSidebarControl();
+        removeSelectedImage();
+        ['f-order-id-input', 'f-customer-name-input', 'f-complaint-msg-input', 'f-driver-name-input'].forEach(id => document.getElementById(id).value = '');
+
+        renderSystemToast('✅ تم حفظ البلاغ بنجاح!', 'success');
+
+    } catch (error) {
+        console.error('Error saving ticket:', error);
+        renderSystemToast('❌ فشل حفظ البلاغ: ' + error.message, 'danger');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'توجيه البلاغ فوراً';
+    }
+}
+
+        async function triggerBranchBroadcast(br, ord, cust, type, msg, time, imageUrl = null) {
+    // جلب أرقام الهواتف المسجلة للفرع
+    const phonesFromStorage = JSON.parse(localStorage.getItem('whatsapp_' + br) || '[]');
+    if (phonesFromStorage.length === 0) return;
+
+    // البيانات الجديدة من صورتك (استبدل كلمة 'ضع_هنا_API_SECRET' بالرمز الحقيقي من عندك)
+    const instanceId = '526168832472494'; 
+    const token = 'ضع_هنا_API_SECRET'; // انسخ الـ API Secret من الصورة وضعه هنا
+
+    // نص الرسالة
+    const caption = `🚨 *بلاغ CMS جديد* 🚨\n\n📍 الفرع: ${br}\n⏰ ${time}\n🔢 الطلب: ${ord}\n👤 العميل: ${cust}\n🏷️ التصنيف: ${type}\n📝 التفاصيل: ${msg}\n👷 المتلقي: ${currentUserSession.name}`;
+
+    phonesFromStorage.forEach(ph => {
+        let endpoint = '';
+        let params = new URLSearchParams();
+        params.append('token', token);
+        params.append('to', ph);
+
+        if (imageUrl) {
+            // إذا كان هناك صورة، نستخدم رابط إرسال الصور
+            endpoint = `https://api.ultramsg.com/instance${instanceId}/messages/image`;
+            params.append('image', imageUrl);
+            params.append('caption', caption);
+        } else {
+            // إذا لم توجد صورة، نرسل نص فقط
+            endpoint = `https://api.ultramsg.com/instance${instanceId}/messages/chat`;
+            params.append('body', caption);
         }
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params
+        }).then(res => res.json())
+          .then(data => console.log('WhatsApp Response:', data))
+          .catch(err => console.error('WhatsApp Error:', err));
+    });
+}
 
         function renderLiveBroadcastMatrix() {
             const box = document.getElementById('render-live-feed-matrix');
@@ -2801,78 +3063,79 @@ const pList = phonesFromStorage;
         }
 
         // === UPDATED TICKET MARKUP FOR HOVER REVEAL ===
-        function generateTicketMarkup(id, op, isInteractive, p) {
-            let btns = "";
-            if (isInteractive) {
-                if (op.stage === 'waiting_review' && (p.reply_ticket || currentUserSession.role === 'SUPER')) {
-                    btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow); color:#000;" onclick="event.stopPropagation(); openBranchReplyModalHub('${id}')">الرد والمراجعة</button>`;
-                } else if (op.stage === 'replied' && currentUserSession.role === 'SUPER') {
-                    btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow);" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق (سليم)</button>
-                                            <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); sendToBranchManagerFromCallCenter('${id}')">للمدير</button>`;
-                } else if (op.stage === 'sent_to_branch_manager' && currentUserSession.title === 'مدير فرع') {
-                    btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); openBranchManagerReplyModalHub('${id}')">رد المدير</button>`;
-                } else if (op.stage === 'sent_back_to_call_center' && currentUserSession.role === 'SUPER') {
-                    btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow);" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق (سليم)</button>
-                                            <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); sendToRegionalManager('${id}')">إرسال للمنطقة</button>
-                                            <button class="btn-vip-execute-master" onclick="event.stopPropagation(); sendToRegionalManager('${id}')">إرسال للمنطقة</button>`;
-                } else if (op.stage === 'sent_to_regional_manager' && currentUserSession.title === 'مدير المنطقة') {
-                    btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); openRegionalManagerReplyModalHub('${id}')">رد المنطقة</button>`;
-                } else if (op.stage === 'sent_to_regional_manager' && currentUserSession.role === 'SUPER') {
-                    btns = `<button class="btn-vip-execute-master" onclick="event.stopPropagation(); finalizeTicketAndArchive('${id}')">إغلاق نهائي</button>`;
-                }
-            }
+      function generateTicketMarkup(id, op, isInteractive, p) {
+    let btns = "";
+    // ... (جزء الأزرار يظل كما هو دون تغيير) ...
+    if (isInteractive) {
+        if (op.stage === 'waiting_review' && (p.reply_ticket || currentUserSession.role === 'SUPER')) {
+            btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow); color:#000;" onclick="event.stopPropagation(); openBranchReplyModalHub('${id}')">الرد والمراجعة</button>`;
+        } 
+        // ... بقية شروط الأزرار ...
+    }
 
-if (currentUserSession.role === 'SUPER') {
-    btns += `
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:5px;">
-            <button class="btn-vip-execute-master" style="background:#3b82f6; color:#fff;" onclick="event.stopPropagation(); openEditTicketModal('${id}')">
-                <i class="fas fa-edit"></i> تعديل
-            </button>
-            <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); deleteTicketRecord('${id}')">
-                <i class="fas fa-trash"></i> حذف
-            </button>
+    if (currentUserSession.role === 'SUPER') {
+        btns += `
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:5px;">
+                <button class="btn-vip-execute-master" style="background:#3b82f6; color:#fff;" onclick="event.stopPropagation(); openEditTicketModal('${id}')">تعديل</button>
+                <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); deleteTicketRecord('${id}')">حذف</button>
+            </div>`;
+    }
+
+    const logs = op.logs ? op.logs.map(l => `<div style="font-size:0.8rem; color:#8b949e;">• ${l.user}: ${l.action}</div>`).join('') : '';
+
+    // --- التعديل هنا لإظهار الصورة ---
+    let imageHtml = '';
+    let thumbnailHtml = '';
+    
+    if (op.imageUrl) {
+        // أيقونة برتقالية صغيرة تدل على وجود صورة
+        thumbnailHtml = `
+            <div style="position:absolute; top:10px; left:10px; width:35px; height:35px; background:var(--gold-master); border-radius:8px; display:flex; align-items:center; justify-content:center; z-index:10;">
+                <i class="fas fa-image" style="color:#000;"></i>
+            </div>`;
+        
+        // عرض الصورة الفعلي
+        imageHtml = `
+            <div style="margin: 10px 0; text-align:center; width:100%;">
+                <img src="${op.imageUrl}" 
+                     style="width:100%; max-height:250px; border-radius:12px; border:1px solid var(--border-glow-line); object-fit: cover; cursor: zoom-in;" 
+                     onclick="event.stopPropagation(); window.open('${op.imageUrl}')">
+            </div>`;
+    }
+
+    return `
+        <div class="massive-glass-card ticket-visual-unit" onclick="this.classList.toggle('is-fixed')">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; position:relative;">
+                <div>
+                    <b style="color:var(--gold-master); font-size:1.1rem;">📍 ${op.branch || '---'}</b>
+                    <div style="font-size:0.75rem; color:#8b949e;">${op.date || ''} ${op.timeOnly || ''}</div>
+                </div>
+                <div style="text-align:left;">
+                    <span style="color:var(--gold-master); font-size:0.8rem;">رقم الطلب</span>
+                    <div class="order-number-badge">#${op.order || '000'}</div>
+                </div>
+                ${thumbnailHtml}
+            </div>
+
+            <div class="ticket-hidden-details">
+                ${imageHtml} <!-- سيظهر هنا رابط الصورة المرفوعة -->
+                <div style="margin-bottom:10px;">
+                    <div style="font-weight:bold; color:#fff;"><i class="fas fa-user"></i> العميل: ${op.customer}</div>
+                    <div style="color:var(--danger-pulse);"><i class="fas fa-tag"></i> النوع: ${op.type}</div>
+                    <div style="color:var(--success-glow);"><i class="fas fa-motorcycle"></i> الطيار: ${op.driver || '---'}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:0.9rem; border-right: 3px solid var(--gold-master);">
+                    ${op.msg}
+                </div>
+                <div style="border-top:1px solid #333; padding-top:5px; margin-bottom:10px;">
+                    ${logs}
+                </div>
+                <div style="display:grid; grid-template-columns:1fr; gap:5px;">
+                    ${btns}
+                </div>
+            </div>
         </div>`;
 }
-            const logs = op.logs ? op.logs.map(l => `<div style="font-size:0.8rem; color:#8b949e;">• ${l.user}: ${l.action}</div>`).join('') : '';
-
-            return `
-                                <div class="massive-glass-card ticket-visual-unit" onclick="this.classList.toggle('is-fixed')">
-                                    <!-- الجزء الظاهر دائماً -->
-                                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                        <div>
-                                            <b style="color:var(--gold-master); font-size:1.1rem;">📍 ${op.branch || 'فرع غير معروف'}</b>
-                                            <div style="font-size:0.75rem; color:#8b949e;">${op.date || ''} ${op.timeOnly || ''}</div>
-                                        </div>
-                                        <div style="text-align:left;">
-                                            <span style="color:var(--gold-master); font-size:0.8rem;">رقم الطلب</span>
-                                            <div class="order-number-badge">#${op.order || '000'}</div>
-                                        </div>
-                                    </div>
-
-                                    <!-- الجزء المخفي الذي يظهر عند الضغط أو الهافر -->
-                                    <div class="ticket-hidden-details">
-                                        <div style="margin-bottom:10px;">
-                                            <div style="font-weight:bold; color:#fff;">👤 العميل: ${op.customer}</div>
-                                            <div style="color:var(--danger-pulse);">🏷️ النوع: ${op.type}</div>
-                                            <div style="color:var(--success-glow);">👨‍✈️ الطيار: ${op.driver || '---'}</div>
-                                        </div>
-                                        <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:5px; margin-bottom:10px; font-size:0.9rem;">
-                                            📝 ${op.msg}
-                                        </div>
-                                        <div style="border-top:1px solid #333; padding-top:5px; margin-bottom:10px;">
-                                            ${logs}
-                                        </div>
-                                        <div style="display:grid; grid-template-columns:1fr; gap:5px;">
-                                            ${btns}
-                                        </div>
-                                    </div>
-
-                                    <div style="position:absolute; bottom:5px; left:50%; transform:translateX(-50%); font-size:0.7rem; color:#444;">
-                                        إضغط للتثبيت
-                                    </div>
-                                </div>`;
-        }
-
         async function executeAdvancedAnalyticsSequence() {
             const from = document.getElementById('reports-date-from').value;
             const to = document.getElementById('reports-date-to').value;

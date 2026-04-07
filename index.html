@@ -2316,6 +2316,7 @@ async function uploadImagesToImgBB() {
         <label>التاريخ</label><input type="date" id="f-date-master">
         <label>الأوردر</label><input id="f-order-id-input" placeholder="#00000000">
         <label>العميل</label><input id="f-customer-name-input" placeholder="الاسم">
+        <label>📞 رقم الهاتف</label><input id="f-customer-phone-input" type="tel" placeholder="01xxxxxxxxx" maxlength="11">
         <label>التصنيف</label>
         <!-- قسم رفع الصور المتعددة المطور -->
         <label>📷 صور الشكوى (اختياري - حتى 5 صور)</label>
@@ -3007,13 +3008,17 @@ function initCoreDataListeners() {
         }
 
 async function runComplaintTicketSequence() {
+    // 1. جمع البيانات من الحقول
     const br = document.getElementById('f-branch-master-sel').value;
     const ord = document.getElementById('f-order-id-input').value.trim();
     const cust = document.getElementById('f-customer-name-input').value.trim();
+    const phone = document.getElementById('f-customer-phone-input').value.trim(); // قراءة رقم الهاتف
     const type = document.getElementById('f-complaint-type-sel').value;
     const orderType = document.getElementById('f-order-type-sel').value;
+    const driver = document.getElementById('f-driver-name-input').value.trim(); // اسم الطيار
     const msg = document.getElementById('f-complaint-msg-input').value.trim();
     
+    // 2. التحقق من البيانات الأساسية
     if (!ord || !cust || !msg) { 
         Swal.fire('تنبيه', 'بيانات ناقصة (رقم الأوردر أو العميل أو التفاصيل)', 'warning'); 
         return; 
@@ -3021,39 +3026,65 @@ async function runComplaintTicketSequence() {
 
     const submitBtn = document.getElementById('submit-complaint-btn');
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '⏳ جاري رفع الصور...';
+    submitBtn.innerHTML = '⏳ جاري المعالجة...';
 
     const timeNow = new Date().toLocaleTimeString('ar-EG');
     const selectedDate = document.getElementById('f-date-master').value;
 
     try {
+        // 3. رفع الصور إذا وجدت
         let uploadedUrls = [];
-        
-        // رفع الصور المتعددة
         if (selectedImageFiles.length > 0) {
-            renderSystemToast(`⏳ جاري رفع ${selectedImageFiles.length} صور...`, 'info');
+            submitBtn.innerHTML = '⏳ جاري رفع الصور...';
             uploadedUrls = await uploadImagesToImgBB();
         }
 
+        // 4. إنشاء البلاغ في قاعدة البيانات
         const newTicketRef = dbHub.ref('operations').push();
         const baseTicketData = {
-            branch: br, order: ord, customer: cust, type: type, orderType: orderType, 
-            msg: msg, stage: 'waiting_review', status: 'active',
-            timestamp: new Date().toLocaleString('ar-EG'), timeOnly: timeNow, date: selectedDate,
+            branch: br, 
+            order: ord, 
+            customer: cust, 
+            customer_phone: phone, // حفظ رقم الهاتف في قاعدة البيانات
+            type: type, 
+            orderType: orderType, 
+            driver: driver,
+            msg: msg, 
+            stage: 'waiting_review', 
+            status: 'active',
+            timestamp: new Date().toLocaleString('ar-EG'), 
+            timeOnly: timeNow, 
+            date: selectedDate,
             author: currentUserSession.name,
-            imageUrls: uploadedUrls, // حفظ مصفوفة الروابط هنا
-            logs: [{ time: timeNow, user: currentUserSession.name, action: `إنشاء بلاغ بـ (${uploadedUrls.length}) صور` }]
+            imageUrls: uploadedUrls,
+            logs: [{ 
+                time: timeNow, 
+                user: currentUserSession.name, 
+                action: `إنشاء بلاغ جديد${uploadedUrls.length > 0 ? ' بملحقات صور' : ''}` 
+            }]
         };
 
         await newTicketRef.set(baseTicketData);
 
-        // إشعار واتساب (يرسل الصورة الأولى فقط كمثال أو رابط البلاغ)
-        triggerBranchBroadcast(br, ord, cust, type, msg, timeNow, uploadedUrls[0]);
+        // 5. إرسال إشعار واتساب (إرسال رقم الهاتف في نص الرسالة أيضاً لسهولة التواصل)
+        const whatsappMsg = `${msg}\n📞 رقم العميل: ${phone || 'غير مسجل'}`;
+        triggerBranchBroadcast(br, ord, cust, type, whatsappMsg, timeNow, uploadedUrls[0] || null);
 
-        // تنظيف الواجهة
-        closeSidebarControl();
-        removeSelectedImage(); // هذه الدالة تصفر المصفوفة
-        ['f-order-id-input', 'f-customer-name-input', 'f-complaint-msg-input'].forEach(id => document.getElementById(id).value = '');
+        // 6. تنظيف الواجهة وإعادة الضبط
+        closeSidebarControl(); // إغلاق القائمة الجانبية
+        removeSelectedImage(); // مسح الصور المختارة من المعرض
+        
+        // مسح خانات الإدخال
+        const fieldsToReset = [
+            'f-order-id-input', 
+            'f-customer-name-input', 
+            'f-customer-phone-input', 
+            'f-driver-name-input', 
+            'f-complaint-msg-input'
+        ];
+        fieldsToReset.forEach(id => {
+            if(document.getElementById(id)) document.getElementById(id).value = '';
+        });
 
         renderSystemToast('✅ تم توجيه البلاغ بنجاح!', 'success');
 
@@ -3061,6 +3092,7 @@ async function runComplaintTicketSequence() {
         console.error('Error:', error);
         renderSystemToast('❌ فشل الإرسال: ' + error.message, 'danger');
     } finally {
+        // 7. إعادة زر الإرسال لحالته الطبيعية
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'توجيه البلاغ فوراً';
     }
@@ -3228,6 +3260,9 @@ if (currentUserSession.role === 'SUPER') {
                 ${imagesHtml} 
                 <div style="margin-bottom:10px;">
                     <div style="font-weight:bold; color:#fff;"><i class="fas fa-user"></i> العميل: ${op.customer}</div>
+                    <div style="color:#10b981; font-size:0.9rem;"><i class="fas fa-phone"></i> 
+                        <a href="tel:${op.customer_phone || ''}" style="color:#10b981; text-decoration:none;" title="اتصال">${op.customer_phone || 'غير محدد'}</a>
+                    </div>
                     <div style="color:var(--danger-pulse);"><i class="fas fa-tag"></i> النوع: ${op.type}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:0.9rem; border-right: 3px solid var(--gold-master);">

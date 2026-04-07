@@ -2080,6 +2080,11 @@ async function uploadImagesToImgBB() {
                         <h4>تقرير مفصل</h4>
                         <div class="val" style="color:#1d4ed8;"><i class="fas fa-list-ul"></i></div>
                     </div>
+<!-- ابحث عن هذا الجزء وقم بتعديله كما يلي -->
+<div class="card-v3" id="kpi-card-novalue" onclick="showNoValueReport()" style="cursor:pointer; border: 2px solid #64748b;" title="سجل بلاغات نوت فاليو">
+    <h4>سجل بلاغات (Not Valid)</h4>
+    <div class="val" style="color:#64748b;"><i class="fas fa-eye-slash"></i></div>
+</div>
                     <div class="card-v3" onclick="showRestaurantTotalReport()"
                         style="cursor:pointer; border: 2px solid #fbbf24;" title="اجمالي المطعم">
                         <h4>اجمالي المطعم</h4>
@@ -3135,13 +3140,19 @@ function generateTicketMarkup(id, op, isInteractive, p) {
         }
     }
 
-    if (currentUserSession.role === 'SUPER') {
-        btns += `
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:5px;">
-                <button class="btn-vip-execute-master" style="background:#3b82f6; color:#fff;" onclick="event.stopPropagation(); openEditTicketModal('${id}')">تعديل</button>
-                <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); deleteTicketRecord('${id}')">حذف</button>
-            </div>`;
-    }
+    // ابحث عن هذا الجزء داخل دالة generateTicketMarkup وقم بتعديله
+if (currentUserSession.role === 'SUPER') {
+    btns += `
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:5px;">
+            <button class="btn-vip-execute-master" style="background:#3b82f6; color:#fff;" onclick="event.stopPropagation(); openEditTicketModal('${id}')">تعديل</button>
+            <button class="btn-vip-execute-master" style="background:var(--danger-pulse);" onclick="event.stopPropagation(); deleteTicketRecord('${id}')">حذف</button>
+        </div>
+        <!-- الزر الجديد: نوت فاليو -->
+        <button class="btn-vip-execute-master" style="background:#64748b; color:#fff; margin-top:5px; border:1px solid #94a3b8;" 
+                onclick="event.stopPropagation(); markTicketAsNoValue('${id}')">
+            <i class="fas fa-eye-slash"></i> نوت فاليو
+        </button>`;
+}
 
     const logs = op.logs ? op.logs.map(l => `<div style="font-size:0.8rem; color:#8b949e;">• ${l.user}: ${l.action}</div>`).join('') : '';
 
@@ -4125,6 +4136,43 @@ function generateTicketMarkup(id, op, isInteractive, p) {
             if (r) { await dbHub.ref('operations/' + id).update({ stage: 'sent_to_regional_manager', regional_manager_verdict: r[0], regional_manager_name: currentUserSession.name, logs: [...(complaintsCache[id].logs || []), { time: new Date().toLocaleTimeString('ar-EG'), user: currentUserSession.name, action: 'رد المنطقة: ' + r[0] }] }); renderSystemToast("تم الرد", "success"); }
         }
 
+        // ⭐ NEW: دالة وضع علامة "نوت فاليو" على البلاغ (للإدارة العليا فقط)
+        async function markTicketAsNoValue(id) {
+            const op = complaintsCache[id];
+            if (!op) {
+                renderSystemToast("البلاغ غير موجود", "danger");
+                return;
+            }
+
+            const confirm = await Swal.fire({
+                title: 'تأكيد نوت فاليو؟',
+                text: `هل تريد وضع علامة "نوت فاليو" على بلاغ ${op.order}؟`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'نعم، نوت فاليو',
+                confirmButtonColor: '#64748b'
+            });
+
+            if (confirm.isConfirmed) {
+                const newLog = {
+                    time: new Date().toLocaleTimeString('ar-EG'),
+                    user: currentUserSession.name,
+                    action: "تم وضع علامة نوت فاليو (لا قيمة)"
+                };
+
+                try {
+                    await dbHub.ref('operations/' + id).update({
+                        noValue: true,  // العلامة الجديدة
+                        logs: [...(op.logs || []), newLog]
+                    });
+                    renderSystemToast("✅ تم وضع علامة نوت فاليو بنجاح", "success");
+                } catch (error) {
+                    console.error("خطأ في تحديث نوت فاليو:", error);
+                    renderSystemToast("فشل التحديث", "danger");
+                }
+            }
+        }
+
         // وظيفة حذف موظف نهائياً (من الإدارة ومن الرادار)
         async function deleteUserEntirely(uid, userName) {
             // 1. التأكد أن المستخدم الحالي "سوبر أدمن" ليكون له صلاحية الحذف
@@ -4509,40 +4557,48 @@ function generateTicketMarkup(id, op, isInteractive, p) {
                 renderSystemToast("فشل الحفظ في السيرفر", "danger");
             }
         }
-        function runPermissionShieldCheck() {
-            if (!currentUserSession) return;
+       function runPermissionShieldCheck() {
+    if (!currentUserSession) return;
 
-            // 1. جلب صلاحيات الرتبة الخاصة بالموظف الحالي
-            const userRank = currentUserSession.title;
-            const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[userRank]) ? systemSettingsCache.permissions[userRank] : {};
+    // 1. جلب صلاحيات الرتبة الخاصة بالموظف الحالي
+    const userRank = currentUserSession.title;
+    const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[userRank]) ? systemSettingsCache.permissions[userRank] : {};
 
-            // 2. صلاحية دخول الإدارة (تظهر للسوبر أدمن أو من لديه صلاحية admin_access)
-            const isAdmin = currentUserSession.role === 'SUPER' || p.admin_access === true;
-            const adminTab = document.getElementById('tab-admin');
-            if (adminTab) {
-                if (isAdmin) adminTab.classList.remove('hidden');
-                else adminTab.classList.add('hidden');
-            }
+    // 2. صلاحية دخول الإدارة
+    const isAdmin = currentUserSession.role === 'SUPER' || p.admin_access === true;
+    const adminTab = document.getElementById('tab-admin');
+    if (adminTab) {
+        if (isAdmin) adminTab.classList.remove('hidden');
+        else adminTab.classList.add('hidden');
+    }
 
-            // 3. صلاحية إنشاء بلاغ (الزر العائم +)
-            const canCreate = currentUserSession.role === 'SUPER' || p.create_ticket === true;
-            const floatBtn = document.getElementById('floating-plus-btn');
-            if (floatBtn) {
-                if (canCreate) floatBtn.classList.remove('hidden');
-                else floatBtn.classList.add('hidden');
-            }
+    // 3. صلاحية إنشاء بلاغ (الزر العائم +)
+    const canCreate = currentUserSession.role === 'SUPER' || p.create_ticket === true;
+    const floatBtn = document.getElementById('floating-plus-btn');
+    if (floatBtn) {
+        if (canCreate) floatBtn.classList.remove('hidden');
+        else floatBtn.classList.add('hidden');
+    }
 
-            // 4. التحكم في التبويبات الأخرى (اليومية والتقارير)
-            const canViewDaily = currentUserSession.role === 'SUPER' || p.daily_edit === true;
-            const dailyTab = document.getElementById('tab-daily');
-            if (dailyTab) {
-                if (canViewDaily) dailyTab.classList.remove('hidden');
-                else dailyTab.classList.add('hidden');
-            }
+    // 4. التحكم في التبويبات الأخرى (اليومية)
+    const canViewDaily = currentUserSession.role === 'SUPER' || p.daily_edit === true;
+    const dailyTab = document.getElementById('tab-daily');
+    if (dailyTab) {
+        if (canViewDaily) dailyTab.classList.remove('hidden');
+        else dailyTab.classList.add('hidden');
+    }
 
-            // ملاحطة: صلاحيات (view_all) و (reply_ticket) مطبقة فعلياً داخل دوال الـ Render والـ Modals
+    // ⭐ 5. الجزء المطلوب: إخفاء كارت Not Valid عن غير الإدارة العليا
+    const noValueCard = document.getElementById('kpi-card-novalue');
+    if (noValueCard) {
+        // إذا كان المستخدم SUPER (إدارة عليا) أو فرعه هو ALL (إدارة مركزية)
+        if (currentUserSession.role === 'SUPER' || currentUserSession.branch === 'ALL') {
+            noValueCard.style.display = 'block'; // إظهار
+        } else {
+            noValueCard.style.display = 'none';  // إخفاء تماماً لمدير الفرع والموظف العادي
         }
-
+    }
+}
         // Helpers
         function openSidebarControl() { document.getElementById('sidebar-complaint-arc-hub').classList.add('open'); document.getElementById('master-dimmer').style.display = 'block'; }
         function closeSidebarControl() { document.getElementById('sidebar-complaint-arc-hub').classList.remove('open'); document.getElementById('master-dimmer').style.display = 'none'; }
@@ -5046,7 +5102,139 @@ async function openEditTicketModal(id) {
         }
     }
 }
+// وظيفة تحويل البلاغ إلى "نوت فاليو" (غير ذي قيمة)
+async function markTicketAsNoValue(id) {
+    const result = await Swal.fire({
+        title: 'تحويل إلى نوت فاليو؟',
+        text: "سيتم أرشفة البلاغ واعتباره غير مؤثر على تقارير الكفاءة (Not Value).",
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#64748b',
+        cancelButtonColor: '#30363d',
+        confirmButtonText: 'نعم، نوت فاليو',
+        cancelButtonText: 'تراجع',
+        background: '#0d1117',
+        color: '#f0f6fc'
+    });
 
+    if (result.isConfirmed) {
+        try {
+            const op = complaintsCache[id];
+            const newLog = {
+                time: new Date().toLocaleTimeString('ar-EG'),
+                user: currentUserSession.name,
+                action: "قام بتحويل البلاغ إلى (نوت فاليو)"
+            };
+
+            // تحديث البلاغ في قاعدة البيانات
+            await dbHub.ref('operations/' + id).update({
+                status: 'done',            // نقله للأرشيف
+                stage: 'no_value',        // تمييزه بمرحلة نوت فاليو
+                type: 'نوت فاليو',         // تغيير النوع حتى لا يحسب في تقارير الأنواع
+                logs: [...(op.logs || []), newLog]
+            });
+
+            renderSystemToast("تم استبعاد البلاغ بنجاح", "info");
+        } catch (error) {
+            console.error(error);
+            renderSystemToast("حدث خطأ أثناء التحديث", "danger");
+        }
+    }
+}// دالة عرض تقرير بلاغات نوت فاليو المستبعدة وحساب نسبتها
+async function showNoValueReport() {
+    const from = document.getElementById('reports-date-from').value;
+    const to = document.getElementById('reports-date-to').value;
+
+    if (!from || !to) {
+        Swal.fire('تنبيه', 'يرجى تحديد التاريخ أولاً من الأعلى', 'warning');
+        return;
+    }
+
+    // 1. جلب بيانات الأوردرات الكلية للحساب
+    const dSnap = await dbHub.ref('daily_stats').get();
+    const allOrders = dSnap.val() || {};
+
+    // 2. فلترة بلاغات نوت فاليو فقط
+    const noValueOps = Object.values(complaintsCache).filter(o => 
+        o.date >= from && o.date <= to && (o.noValue === true || o.stage === 'no_value' || o.type === 'نوت فاليو')
+    );
+
+    let branchSummary = [];
+    let grandTotalNoValue = 0;
+    let grandTotalOrders = 0;
+
+    // 3. تحليل البيانات لكل فرع
+    branchListCache.forEach(br => {
+        const brNoValueCount = noValueOps.filter(o => o.branch === br).length;
+        
+        // حساب إجمالي أوردرات الفرع في الفترة المختارة
+        let brOrders = 0;
+        Object.keys(allOrders).forEach(d => {
+            if (d >= from && d <= to) {
+                brOrders += parseInt(allOrders[d][br] || 0);
+            }
+        });
+
+        const percentage = brOrders > 0 ? ((brNoValueCount / brOrders) * 100).toFixed(2) : "0.00";
+
+        branchSummary.push({
+            name: br,
+            count: brNoValueCount,
+            orders: brOrders,
+            perc: percentage
+        });
+
+        grandTotalNoValue += brNoValueCount;
+        grandTotalOrders += brOrders;
+    });
+
+    // ترتيب الفروع حسب عدد بلاغات نوت فاليو (الأعلى أولاً)
+    branchSummary.sort((a, b) => b.count - a.count);
+
+    // 4. بناء جدول العرض الاحترافي
+    let tableHtml = `
+        <div class="glass-table-container floating-3d" style="margin-top: 20px; border-right: 4px solid #64748b;">
+            <h3 style="color: #94a3b8; margin-bottom: 20px; text-align: center;">
+                <i class="fas fa-eye-slash"></i> تقرير بلاغات No Value (المستبعدة)
+            </h3>
+            <table class="premium-matrix">
+                <thead>
+                    <tr>
+                        <th style="background: #334155;">الفرع</th>
+                        <th style="background: #334155;">بلاغات مستبعدة</th>
+                        <th style="background: #334155;">إجمالي الأوردرات</th>
+                        <th style="background: #1e293b;">النسبة المئوية</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+    branchSummary.forEach(br => {
+        tableHtml += `
+            <tr>
+                <td style="color: #fbbf24; font-weight: bold;">${br.name}</td>
+                <td style="font-weight: 900;">${br.count}</td>
+                <td style="color: #94a3b8;">${br.orders}</td>
+                <td style="color: #64748b; font-weight: 800;">${br.perc}%</td>
+            </tr>`;
+    });
+
+    const totalPerc = grandTotalOrders > 0 ? ((grandTotalNoValue / grandTotalOrders) * 100).toFixed(2) : "0.00";
+
+    tableHtml += `
+                    <tr style="background: #334155; color: white; font-weight: 900;">
+                        <td>الإجمالي العام</td>
+                        <td>${grandTotalNoValue}</td>
+                        <td>${grandTotalOrders}</td>
+                        <td>${totalPerc}%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>`;
+
+    // 5. حقن الجدول في الحاوية المخصصة
+    document.getElementById('matrix-report-table-container').innerHTML = tableHtml;
+    renderSystemToast(`تم عرض ${grandTotalNoValue} بلاغ مستبعد بنجاح`, "info");
+}
     </script>
 </body>
 

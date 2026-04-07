@@ -2287,6 +2287,8 @@ async function uploadImagesToImgBB() {
                             <label><input type="checkbox" id="perm-reply-ticket"> صلاحية الرد</label>
                             <label><input type="checkbox" id="perm-daily-edit"> تحرير اليومية</label>
                             <label><input type="checkbox" id="perm-admin-access"> دخول الإدارة</label>
+                                <label><input type="checkbox" id="perm-delete-ticket"> صلاحية الحذف 🗑️</label> 
+
                             <button class="btn-vip-execute-master" style="grid-column: span 2;"
                                 onclick="saveRankPermissionsSequence()">تثبيت</button>
                         </div>
@@ -4185,7 +4187,17 @@ if (currentUserSession.role === 'SUPER') {
 
             renderSystemToast("تم التصعيد لمدير المنطقة", "danger");
         }
-        async function deleteTicketRecord(id) {
+      async function deleteTicketRecord(id) {
+    // التحقق من الصلاحية أولاً داخل الدالة
+    const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[currentUserSession.title]) ? systemSettingsCache.permissions[currentUserSession.title] : {};
+    const hasPermission = currentUserSession.role === 'SUPER' || p.delete_ticket === true;
+
+    if (!hasPermission) {
+        renderSystemToast("⚠️ عذراً، ليس لديك صلاحية حذف البلاغات", "danger");
+        return;
+    }
+
+    // بقية كود الحذف الأصلي الخاص بك...
     const result = await Swal.fire({
         title: 'نقل إلى المحذوفات؟',
         text: "سيتم إزالة البلاغ من البث المباشر ونقله إلى قائمة المحذوفات.",
@@ -4195,6 +4207,9 @@ if (currentUserSession.role === 'SUPER') {
         confirmButtonText: 'نعم، نقل للمحذوفات',
         cancelButtonText: 'إلغاء'
     });
+    
+    // ... تكملة الكود (نفس الكود اللي عندك شغال تمام)
+
 
     if (result.isConfirmed) {
         const op = complaintsCache[id];
@@ -4462,25 +4477,47 @@ if (currentUserSession.role === 'SUPER') {
             localStorage.setItem('whatsapp_' + br, JSON.stringify(phones));
             renderBranchWhatsappList();
         }
-        async function loadRankPermissionsMatrixHub() {
-            const rank = document.getElementById('adm-rank-matrix-sel').value;
-            if (!rank) {
-                document.getElementById('adm-permissions-grid-hub').classList.add('hidden');
-                return;
-            }
+      // 1. تحديث دالة تحميل الصلاحيات من السيرفر للشاشة
+async function loadRankPermissionsMatrixHub() {
+    const rank = document.getElementById('adm-rank-matrix-sel').value;
+    if (!rank) {
+        document.getElementById('adm-permissions-grid-hub').classList.add('hidden');
+        return;
+    }
+    document.getElementById('adm-permissions-grid-hub').classList.remove('hidden');
 
-            document.getElementById('adm-permissions-grid-hub').classList.remove('hidden');
+    const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[rank]) ? systemSettingsCache.permissions[rank] : {};
 
-            // جلب البيانات من السيرفر أو الكاش
-            const p = (systemSettingsCache.permissions && systemSettingsCache.permissions[rank]) ? systemSettingsCache.permissions[rank] : {};
+    document.getElementById('perm-view-all').checked = p.view_all || false;
+    document.getElementById('perm-create-ticket').checked = p.create_ticket || false;
+    document.getElementById('perm-reply-ticket').checked = p.reply_ticket || false;
+    document.getElementById('perm-daily-edit').checked = p.daily_edit || false;
+    document.getElementById('perm-admin-access').checked = p.admin_access || false;
+    // السطر الجديد
+    document.getElementById('perm-delete-ticket').checked = p.delete_ticket || false; 
+}
 
-            // ضبط الـ Checkboxes
-            document.getElementById('perm-view-all').checked = p.view_all || false;
-            document.getElementById('perm-create-ticket').checked = p.create_ticket || false;
-            document.getElementById('perm-reply-ticket').checked = p.reply_ticket || false;
-            document.getElementById('perm-daily-edit').checked = p.daily_edit || false;
-            document.getElementById('perm-admin-access').checked = p.admin_access || false;
-        }
+// 2. تحديث دالة حفظ الصلاحيات للسيرفر
+async function saveRankPermissionsSequence() {
+    const rank = document.getElementById('adm-rank-matrix-sel').value;
+    if (!rank) return;
+
+    const perms = {
+        view_all: document.getElementById('perm-view-all').checked,
+        create_ticket: document.getElementById('perm-create-ticket').checked,
+        reply_ticket: document.getElementById('perm-reply-ticket').checked,
+        daily_edit: document.getElementById('perm-daily-edit').checked,
+        admin_access: document.getElementById('perm-admin-access').checked,
+        delete_ticket: document.getElementById('perm-delete-ticket').checked // السطر الجديد
+    };
+
+    try {
+        await dbHub.ref('settings/permissions/' + rank).set(perms);
+        renderSystemToast("تم تثبيت صلاحيات " + rank + " بنجاح", "success");
+    } catch (e) {
+        renderSystemToast("فشل الحفظ في السيرفر", "danger");
+    }
+}
         async function saveRankPermissionsSequence() {
             const rank = document.getElementById('adm-rank-matrix-sel').value;
             if (!rank) return;

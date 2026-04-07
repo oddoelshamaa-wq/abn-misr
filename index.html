@@ -47,10 +47,11 @@
         const dbHub = firebase.database();
         const storageHub = firebase.storage();
 
-// Image upload handling variables
-        let selectedImageFile = null;
-        let imageUploadUrl = null;
-        let currentTicketId = null; // NEW: لتخزين ID البلاغ الحالي أثناء الرفع
+// Image & Audio upload handling variables [المرحلة 1 ✅]
+let selectedImageFiles = []; // المصفوفة الموجودة حالياً
+let selectedImageFile = null;
+let imageUploadUrls = [];
+let currentTicketId = null;
 
         // Auto-setup image upload handlers when DOM loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -94,98 +95,135 @@
 
         function handleImageDrop(e) {
             const dt = e.dataTransfer;
-            const files = dt.files;
-            
-            if (files.length > 0) {
-                handleImageFile(files[0]);
-            }
+            const files = Array.from(dt.files);
+            handleImageFiles(files);
         }
 
         function handleImageSelection(e) {
-            const file = e.target.files[0];
-            if (file) {
-                handleImageFile(file);
-            }
+            const files = Array.from(e.target.files);
+            handleImageFiles(files);
         }
 
-        function handleImageFile(file) {
-            // Validate file type and size (max 5MB)
-            if (!file.type.startsWith('image/')) {
-                renderSystemToast('يرجى اختيار صورة (JPG/PNG)', 'danger');
+        function handleImageFiles(files) {
+            const validImages = Array.from(files).filter(file => 
+                file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
+            );
+            
+            if (validImages.length === 0) {
+                renderSystemToast('لا توجد صور صالحة (JPG/PNG, max 5MB)', 'danger');
                 return;
             }
             
-            if (file.size > 5 * 1024 * 1024) {
-                renderSystemToast('حجم الصورة كبير جداً (الحد الأقصى 5 ميجا)', 'danger');
+            // Add to array (max 5 total)
+            const newFiles = validImages.filter(f => 
+                !selectedImageFiles.some(existing => existing.name === f.name && existing.size === f.size)
+            );
+            
+            if (selectedImageFiles.length + newFiles.length > 5) {
+                renderSystemToast('الحد الأقصى 5 صور!', 'warning');
                 return;
             }
             
-            selectedImageFile = file;
-            showImagePreview(file);
+            selectedImageFiles.push(...newFiles);
+            showImagesGallery();
         }
 
-        function showImagePreview(file) {
-            const preview = document.getElementById('preview-img');
-            const previewContainer = document.getElementById('image-preview');
-            const removeBtn = document.getElementById('remove-image-btn');
+        function showImagesGallery() {
+            const gallery = document.getElementById('images-gallery');
             const uploadLabel = document.querySelector('#image-upload-container label[for="f-product-image"]');
+            const fileInput = document.getElementById('f-product-image');
             
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                preview.src = e.target.result;
-                previewContainer.style.display = 'block';
-                removeBtn.style.display = 'inline-flex';
-                uploadLabel.style.display = 'none';
-            };
-            reader.readAsDataURL(file);
+            gallery.innerHTML = '';
+            gallery.style.display = selectedImageFiles.length > 0 ? 'flex' : 'none';
+            uploadLabel.style.display = selectedImageFiles.length >= 5 ? 'none' : 'block';
+            fileInput.value = '';
+            
+            selectedImageFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const thumb = document.createElement('div');
+                    thumb.style.cssText = `
+                        position: relative; width: 80px; height: 80px; border-radius: 8px; 
+                        background: #333; margin: 2px; overflow: hidden; border: 2px solid var(--border-glow-line);
+                        display: flex; align-items: center; justify-content: center; cursor: pointer;
+                    `;
+                    
+                    thumb.innerHTML = `
+                        <img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover;">
+                        <button onclick="removeImageAtIndex(${index}); event.stopPropagation();" 
+                                style="position: absolute; top: 2px; right: 2px; background: var(--danger-pulse); 
+                                color: white; border: none; border-radius: 50%; width: 20px; height: 20px; 
+                                font-size: 10px; cursor: pointer;">×</button>
+                    `;
+                    
+                    gallery.appendChild(thumb);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removeImageAtIndex(index) {
+            selectedImageFiles.splice(index, 1);
+            imageUploadUrls.splice(index, 1); // Sync URLs too
+            showImagesGallery();
+            renderSystemToast('تم إزالة الصورة', 'info');
         }
 
         function removeSelectedImage() {
-            selectedImageFile = null;
-            imageUploadUrl = null;
-            currentTicketId = null; // NEW: إعادة تعيين ID البلاغ
-            document.getElementById('image-preview').style.display = 'none';
-            document.getElementById('remove-image-btn').style.display = 'none';
+            selectedImageFiles = [];
+            imageUploadUrls = [];
+            currentTicketId = null;
+            document.getElementById('images-gallery').style.display = 'none';
             document.querySelector('#image-upload-container label[for="f-product-image"]').style.display = 'block';
             document.getElementById('f-product-image').value = '';
             document.getElementById('upload-progress').style.display = 'none';
         }
 
-        // ⭐ NEW: دالة رفع الصورة لـ Firebase Storage مع progress
-    // الدالة الجديدة للرفع على الخدمة الخاصة بك (ImgBB كمثال بناءً على الصورة)
-async function uploadImageToImgBB() {
-    if (!selectedImageFile) return null;
-
-    try {
-        // إظهار شريط التقدم (وهمي لأن الرفع عبر API خارجي لا يدعم تتبع التفاصيل بسهولة مثل فايربيز)
-        document.getElementById('upload-progress').style.display = 'block';
-        const progressBar = document.getElementById('progress-bar');
-        progressBar.style.width = '50%';
-
-        const apiKey = '31dc2ad25cdd12ced09d52324a92a437'; 
-
+        // ⭐ NEW: دالة رفع صور متعددة (Promise.all)
+async function uploadImagesToImgBB() {
+    if (selectedImageFiles.length === 0) return [];
+    
+    document.getElementById('upload-progress').style.display = 'block';
+    const progressBar = document.getElementById('progress-bar');
+    
+    const apiKey = '31dc2ad25cdd12ced09d52324a92a437';
+    const uploadPromises = selectedImageFiles.map(async (file, index) => {
         const formData = new FormData();
-        formData.append('image', selectedImageFile);
-
-        const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            progressBar.style.width = '100%';
-            renderSystemToast('✅ تم رفع الصورة بنجاح!', 'success');
-            return result.data.url; // هذا هو رابط الصورة المباشر
-        } else {
-            throw new Error(result.error.message);
+        formData.append('image', file);
+        
+        try {
+            const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Update progress per image
+                progressBar.style.width = `${((index + 1) / selectedImageFiles.length) * 100}%`;
+                return result.data.url;
+            } else {
+                throw new Error(result.error?.message || 'Unknown error');
+            }
+        } catch (error) {
+            console.error(`Upload failed for image ${index}:`, error);
+            renderSystemToast(`فشل رفع صورة ${index + 1}: ${error.message}`, 'danger');
+            return null; // Skip failed image
         }
-    } catch (error) {
-        console.error('Upload Error:', error);
-        renderSystemToast('❌ فشل رفع الصورة: ' + error.message, 'danger');
-        return null;
+    });
+    
+    const urls = await Promise.all(uploadPromises);
+    const validUrls = urls.filter(url => url !== null);
+    
+    // Hide progress, reset
+    document.getElementById('upload-progress').style.display = 'none';
+    
+    if (validUrls.length > 0) {
+        renderSystemToast(`✅ تم رفع ${validUrls.length}/${selectedImageFiles.length} صورة بنجاح`, 'success');
     }
+    
+    return validUrls;
 }
     </script>
 
@@ -1790,6 +1828,39 @@ async function uploadImageToImgBB() {
             margin-right: 5px;
             vertical-align: middle;
         }
+
+        /* 🎙️ CSS للتسجيل الصوتي [المرحلة 1] */
+        @keyframes pulseMic {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes micPulseRing {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        #mic-icon.recording {
+            animation: pulseMic 0.6s infinite;
+            color: var(--danger-pulse) !important;
+        }
+
+        #audio-recorder-container.recording {
+            border-color: var(--danger-pulse) !important;
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+            animation: micPulseRing 1.5s infinite;
+        }
+
+        #recording-timer {
+            font-family: 'Cairo', monospace !important;
+        }
+
+        #audio-preview {
+            border-radius: 12px;
+            background: rgba(255,255,255,0.1);
+        }
     </style>
 </head>
 
@@ -2205,35 +2276,29 @@ async function uploadImageToImgBB() {
         <label>الأوردر</label><input id="f-order-id-input" placeholder="#00000000">
         <label>العميل</label><input id="f-customer-name-input" placeholder="الاسم">
         <label>التصنيف</label>
-        <!-- قسم رفع الصور المطور -->
-        <label>📷 صورة الشكوى (اختياري)</label>
-        <div id="image-upload-container" class="massive-glass-card" style="padding: 25px; margin-bottom: 25px; border: 2px dashed var(--border-glow-line); text-align: center; position: relative; min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02);">
-            <input type="file" id="f-product-image" accept="image/*" style="display: none;">
+        <!-- قسم رفع الصور المتعددة المطور -->
+        <label>📷 صور الشكوى (اختياري - حتى 5 صور)</label>
+        <div id="image-upload-container" class="massive-glass-card" style="padding: 25px; margin-bottom: 15px; border: 2px dashed var(--border-glow-line); text-align: center; position: relative; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.02);">
+            <input type="file" id="f-product-image" accept="image/*" multiple style="display: none;">
             <label for="f-product-image" style="cursor: pointer; color: var(--gold-master); font-weight: 800; margin-bottom: 15px;">
                 <i class="fas fa-cloud-upload-alt fa-2x" style="margin-left: 10px;"></i>
-                اضغط هنا أو اسحب الصورة
+                اضغط هنا أو اسحب عدة صور (حد أقصى 5)
             </label>
             
-            <!-- منطقة المعاينة -->
-            <div id="image-preview" style="display: none; margin-top: 15px; max-width: 200px; max-height: 200px; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                <img id="preview-img" src="" style="width: 100%; height: 100%; object-fit: cover;">
-            </div>
+            <!-- معرض الصور المتعددة -->
+            <div id="images-gallery" style="display: none; margin-top: 15px; max-width: 100%; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;"></div>
             
             <!-- شريط التقدم -->
             <div id="upload-progress" style="display: none; width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-top: 15px; overflow: hidden;">
                 <div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, var(--success-glow), #059669); width: 0%; transition: width 0.3s ease;"></div>
             </div>
             
-            <!-- زر الحذف -->
-            <button id="remove-image-btn" style="display: none; background: var(--danger-pulse); color: white; border: none; padding: 8px 20px; border-radius: 20px; cursor: pointer; margin-top: 10px; font-weight: 600;" onclick="removeSelectedImage()">
-                <i class="fas fa-trash"></i> إزالة الصورة
-            </button>
-            
             <!-- نص مساعد -->
             <div style="color: var(--text-muted-core); font-size: 0.85rem; margin-top: 10px;">
-                يدعم JPG, PNG (حد أقصى 5 ميجا)
+                يدعم JPG, PNG (حد أقصى 5 صور × 5 ميجا = 25 ميجا)
             </div>
         </div>
+
         <select id="f-complaint-type-sel">
             <option>تأخير</option>
             <option>سوء خدمة</option>
@@ -2906,7 +2971,6 @@ async function runComplaintTicketSequence() {
     const cust = document.getElementById('f-customer-name-input').value.trim();
     const type = document.getElementById('f-complaint-type-sel').value;
     const orderType = document.getElementById('f-order-type-sel').value;
-    const drv = document.getElementById('f-driver-name-input').value.trim();
     const msg = document.getElementById('f-complaint-msg-input').value.trim();
     
     if (!ord || !cust || !msg) { 
@@ -2916,45 +2980,45 @@ async function runComplaintTicketSequence() {
 
     const submitBtn = document.getElementById('submit-complaint-btn');
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '⏳ جاري الإرسال...';
+    submitBtn.innerHTML = '⏳ جاري رفع الصور...';
 
     const timeNow = new Date().toLocaleTimeString('ar-EG');
     const selectedDate = document.getElementById('f-date-master').value;
 
     try {
-        let imageUrl = null;
+        let uploadedUrls = [];
         
-        // رفع الصورة باستخدام ImgBB API (مفتاح مدمج)
-        if (selectedImageFile) {
-            renderSystemToast('⏳ جاري رفع الصورة لخدمة الصور...', 'info');
-            imageUrl = await uploadImageToImgBB();
+        // رفع الصور المتعددة
+        if (selectedImageFiles.length > 0) {
+            renderSystemToast(`⏳ جاري رفع ${selectedImageFiles.length} صور...`, 'info');
+            uploadedUrls = await uploadImagesToImgBB();
         }
 
         const newTicketRef = dbHub.ref('operations').push();
         const baseTicketData = {
             branch: br, order: ord, customer: cust, type: type, orderType: orderType, 
-            msg: msg, driver: drv, stage: 'waiting_review', status: 'active',
+            msg: msg, stage: 'waiting_review', status: 'active',
             timestamp: new Date().toLocaleString('ar-EG'), timeOnly: timeNow, date: selectedDate,
             author: currentUserSession.name,
-            imageUrl: imageUrl,
-            logs: [{ time: timeNow, user: currentUserSession.name, action: "إنشاء بلاغ " + (imageUrl ? "بصورة" : "بدون صورة") }]
+            imageUrls: uploadedUrls, // حفظ مصفوفة الروابط هنا
+            logs: [{ time: timeNow, user: currentUserSession.name, action: `إنشاء بلاغ بـ (${uploadedUrls.length}) صور` }]
         };
 
         await newTicketRef.set(baseTicketData);
 
-        // إرسال للواتساب
-        triggerBranchBroadcast(br, ord, cust, type, msg, timeNow, imageUrl);
+        // إشعار واتساب (يرسل الصورة الأولى فقط كمثال أو رابط البلاغ)
+        triggerBranchBroadcast(br, ord, cust, type, msg, timeNow, uploadedUrls[0]);
 
         // تنظيف الواجهة
         closeSidebarControl();
-        removeSelectedImage();
-        ['f-order-id-input', 'f-customer-name-input', 'f-complaint-msg-input', 'f-driver-name-input'].forEach(id => document.getElementById(id).value = '');
+        removeSelectedImage(); // هذه الدالة تصفر المصفوفة
+        ['f-order-id-input', 'f-customer-name-input', 'f-complaint-msg-input'].forEach(id => document.getElementById(id).value = '');
 
-        renderSystemToast('✅ تم حفظ البلاغ بنجاح!', 'success');
+        renderSystemToast('✅ تم توجيه البلاغ بنجاح!', 'success');
 
     } catch (error) {
-        console.error('Error saving ticket:', error);
-        renderSystemToast('❌ فشل حفظ البلاغ: ' + error.message, 'danger');
+        console.error('Error:', error);
+        renderSystemToast('❌ فشل الإرسال: ' + error.message, 'danger');
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'توجيه البلاغ فوراً';
@@ -3063,14 +3127,12 @@ async function runComplaintTicketSequence() {
         }
 
         // === UPDATED TICKET MARKUP FOR HOVER REVEAL ===
-      function generateTicketMarkup(id, op, isInteractive, p) {
+function generateTicketMarkup(id, op, isInteractive, p) {
     let btns = "";
-    // ... (جزء الأزرار يظل كما هو دون تغيير) ...
     if (isInteractive) {
         if (op.stage === 'waiting_review' && (p.reply_ticket || currentUserSession.role === 'SUPER')) {
             btns = `<button class="btn-vip-execute-master" style="background:var(--success-glow); color:#000;" onclick="event.stopPropagation(); openBranchReplyModalHub('${id}')">الرد والمراجعة</button>`;
-        } 
-        // ... بقية شروط الأزرار ...
+        }
     }
 
     if (currentUserSession.role === 'SUPER') {
@@ -3083,23 +3145,22 @@ async function runComplaintTicketSequence() {
 
     const logs = op.logs ? op.logs.map(l => `<div style="font-size:0.8rem; color:#8b949e;">• ${l.user}: ${l.action}</div>`).join('') : '';
 
-    // --- التعديل هنا لإظهار الصورة ---
-    let imageHtml = '';
-    let thumbnailHtml = '';
-    
-    if (op.imageUrl) {
-        // أيقونة برتقالية صغيرة تدل على وجود صورة
-        thumbnailHtml = `
-            <div style="position:absolute; top:10px; left:10px; width:35px; height:35px; background:var(--gold-master); border-radius:8px; display:flex; align-items:center; justify-content:center; z-index:10;">
-                <i class="fas fa-image" style="color:#000;"></i>
-            </div>`;
+    // --- الجزء المطور لعرض 5 صور بجانب بعض ---
+    let imagesHtml = '';
+    let hasImages = (op.imageUrls && op.imageUrls.length > 0) || op.imageUrl;
+
+    if (hasImages) {
+        // مصفوفة الصور (دعم النظام الجديد والقديم)
+        const allImages = op.imageUrls ? op.imageUrls : [op.imageUrl];
         
-        // عرض الصورة الفعلي
-        imageHtml = `
-            <div style="margin: 10px 0; text-align:center; width:100%;">
-                <img src="${op.imageUrl}" 
-                     style="width:100%; max-height:250px; border-radius:12px; border:1px solid var(--border-glow-line); object-fit: cover; cursor: zoom-in;" 
-                     onclick="event.stopPropagation(); window.open('${op.imageUrl}')">
+        imagesHtml = `
+            <div style="display: flex; gap: 8px; margin: 12px 0; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin;">
+                ${allImages.map(url => `
+                    <div style="flex: 0 0 80px; height: 80px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-glow-line); cursor: zoom-in;" 
+                         onclick="event.stopPropagation(); window.open('${url}')">
+                        <img src="${url}" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                `).join('')}
             </div>`;
     }
 
@@ -3114,15 +3175,13 @@ async function runComplaintTicketSequence() {
                     <span style="color:var(--gold-master); font-size:0.8rem;">رقم الطلب</span>
                     <div class="order-number-badge">#${op.order || '000'}</div>
                 </div>
-                ${thumbnailHtml}
             </div>
 
             <div class="ticket-hidden-details">
-                ${imageHtml} <!-- سيظهر هنا رابط الصورة المرفوعة -->
+                ${imagesHtml} 
                 <div style="margin-bottom:10px;">
                     <div style="font-weight:bold; color:#fff;"><i class="fas fa-user"></i> العميل: ${op.customer}</div>
                     <div style="color:var(--danger-pulse);"><i class="fas fa-tag"></i> النوع: ${op.type}</div>
-                    <div style="color:var(--success-glow);"><i class="fas fa-motorcycle"></i> الطيار: ${op.driver || '---'}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:0.9rem; border-right: 3px solid var(--gold-master);">
                     ${op.msg}
@@ -4987,6 +5046,7 @@ async function openEditTicketModal(id) {
         }
     }
 }
+
     </script>
 </body>
 

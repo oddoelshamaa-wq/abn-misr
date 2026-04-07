@@ -1932,6 +1932,10 @@ async function uploadImagesToImgBB() {
                         class="fas fa-calendar-check"></i> يومية الأوردرات</button>
                 <button class="nav-link-vip" id="tab-archive" onclick="switchToAppModule('archive')"><i
                         class="fas fa-database"></i> أرشيف السحابة</button>
+                        <!-- أضف هذا الزر في القائمة الجانبية -->
+<button class="nav-link-vip" id="tab-deleted" onclick="switchToAppModule('deleted')">
+    <i class="fas fa-trash-alt"></i> الشكاوى المحذوفة
+</button>
                 <button class="nav-link-vip" id="tab-reports" onclick="switchToAppModule('reports')"><i
                         class="fas fa-chart-line"></i> تقارير الكفاءة</button>
                 <button class="nav-link-vip" id="tab-admin" onclick="switchToAppModule('admin')"><i
@@ -2032,18 +2036,48 @@ async function uploadImagesToImgBB() {
             </div>
 
             <!-- ARCHIVE MODULE -->
-            <div id="module-view-archive" class="hidden">
-                <div class="massive-glass-card"
-                    style="padding:60px; display:flex; gap:40px; margin-bottom:60px; align-items:flex-end;">
-                    <div style="flex:1;"><label>من:</label><input type="date" id="archive-date-from"></div>
-                    <div style="flex:1;"><label>إلى:</label><input type="date" id="archive-date-to"></div>
-                    <button class="btn-vip-execute-master" style="width:300px;"
-                        onclick="runArchiveRefreshSequence()">تحديث</button>
-                </div>
-                <div id="render-archive-grid-hub"
-                    style="display:grid; grid-template-columns: repeat(auto-fill, minmax(700px, 1fr)); gap:50px;"></div>
-            </div>
+           <!-- ARCHIVE MODULE (تأكد من وجوده) -->
+<div id="module-view-archive" class="hidden">
+    <div class="massive-glass-card" style="padding:60px; display:flex; gap:40px; margin-bottom:60px; align-items:flex-end;">
+        <div style="flex:1;"><label>من:</label><input type="date" id="archive-date-from"></div>
+        <div style="flex:1;"><label>إلى:</label><input type="date" id="archive-date-to"></div>
+        <button class="btn-vip-execute-master" style="width:300px;" onclick="runArchiveRefreshSequence()">تحديث الأرشيف</button>
+    </div>
+    <div id="render-archive-grid-hub" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px;"></div>
+</div>
 
+<!-- موديول الشكاوى المحذوفة (الموجود تحت الأرشيف) -->
+<!-- موديول الشكاوى المحذوفة المطور بفلتر -->
+<div id="module-view-deleted" class="hidden">
+    <h1 style="font-size:2rem; margin-bottom:20px; color:var(--text-pure); display:flex; align-items:center; gap:15px;">
+        <i class="fas fa-trash-alt" style="color:var(--danger-pulse)"></i> سلة الشكاوى المحذوفة
+    </h1>
+
+    <!-- شريط الفلتر الجديد -->
+    <div class="massive-glass-card" style="padding:20px; display:flex; gap:20px; margin-bottom:30px; align-items:flex-end; border-radius:20px;">
+        <div style="flex:1;">
+            <label>🔍 تصفية بالفرع:</label>
+            <select id="deleted-branch-filter" onchange="renderDeletedComplaints()" style="margin-bottom: 0; padding: 10px;">
+                <option value="ALL">-- جميع الفروع --</option>
+            </select>
+        </div>
+        <div style="flex:1;">
+            <label>📅 من تاريخ:</label>
+            <input type="date" id="deleted-date-from" onchange="renderDeletedComplaints()" style="margin-bottom: 0; padding: 10px;">
+        </div>
+        <div style="flex:1;">
+            <label>📅 إلى تاريخ:</label>
+            <input type="date" id="deleted-date-to" onchange="renderDeletedComplaints()" style="margin-bottom: 0; padding: 10px;">
+        </div>
+        <button class="btn-vip-execute-master" style="width:120px; background:var(--accent-navy);" onclick="renderDeletedComplaints()">
+            <i class="fas fa-sync"></i> تحديث
+        </button>
+    </div>
+
+    <div id="render-deleted-grid-hub" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap:20px;">
+        <!-- البيانات ستظهر هنا -->
+    </div>
+</div>
             <!-- موديول تقارير VIP V47 المطور (تأثيرات 3D + رسم دائري) -->
             <div id="module-view-reports" class="hidden reports-dashboard-v2">
 
@@ -4151,7 +4185,45 @@ if (currentUserSession.role === 'SUPER') {
 
             renderSystemToast("تم التصعيد لمدير المنطقة", "danger");
         }
-        async function deleteTicketRecord(id) { if ((await Swal.fire({ title: 'حذف نهائي؟', icon: 'warning', showCancelButton: true })).isConfirmed) { await dbHub.ref('operations/' + id).remove(); renderSystemToast("تم الحذف", "success"); } }
+        async function deleteTicketRecord(id) {
+    const result = await Swal.fire({
+        title: 'نقل إلى المحذوفات؟',
+        text: "سيتم إزالة البلاغ من البث المباشر ونقله إلى قائمة المحذوفات.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'نعم، نقل للمحذوفات',
+        cancelButtonText: 'إلغاء'
+    });
+
+    if (result.isConfirmed) {
+        const op = complaintsCache[id];
+        if (!op) return;
+
+        // إضافة سجل حركة يوضح من قام بالحذف
+        const newLog = {
+            time: new Date().toLocaleTimeString('ar-EG'),
+            user: currentUserSession.name,
+            action: "قام بنقل البلاغ إلى سلة المحذوفات"
+        };
+
+        try {
+            // 1. نقل البيانات إلى نود جديد في قاعدة البيانات اسمه deleted_operations
+            await dbHub.ref('deleted_operations/' + id).set({
+                ...op,
+                status: 'deleted',
+                logs: [...(op.logs || []), newLog]
+            });
+
+            // 2. حذف البلاغ من النود الأساسي (البث المباشر)
+            await dbHub.ref('operations/' + id).remove();
+
+            renderSystemToast("تم نقل البلاغ للمحذوفات بنجاح", "info");
+        } catch (error) {
+            renderSystemToast("فشل في عملية النقل", "danger");
+        }
+    }
+}
         async function openBranchManagerReplyModalHub(id) {
             const { value: r } = await Swal.fire({ title: 'رد المدير', html: `<select id="s1" class="swal2-input"><option value="كامل">✅ سليم</option><option value="ناقص">❌ ناقص فعلاً</option></select><textarea id="s2" class="swal2-input"></textarea>`, preConfirm: () => [document.getElementById('s1').value, document.getElementById('s2').value] });
             if (r) { await dbHub.ref('operations/' + id).update({ stage: 'sent_back_to_call_center', branch_manager_verdict: r[0], branch_manager_name: currentUserSession.name, logs: [...(complaintsCache[id].logs || []), { time: new Date().toLocaleTimeString('ar-EG'), user: currentUserSession.name, action: 'رد المدير: ' + r[0] }] }); renderSystemToast("تم الرد", "success"); }
@@ -4269,41 +4341,43 @@ if (currentUserSession.role === 'SUPER') {
 
         // Admin Utilities
         function syncUiDropdownSelections() {
-            // 1. تجهيز قائمة الفروع
-            const branchesHtml = branchListCache.map(b => `<option value="${b}">${b}</option>`).join('');
+    // 1. تجهيز قائمة الفروع
+    const branchesHtml = branchListCache.map(b => `<option value="${b}">${b}</option>`).join('');
 
-            // تحديث كل خانات الفروع في النظام
-            const branchSelectors = ['f-branch-master-sel', 'adm-whatsapp-br-sel', 'reg-user-branch-sel-core', 'global-branch-filter', 'log-filter-branch'];
-            branchSelectors.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    const currentVal = el.value;
-                    if (id === 'reg-user-branch-sel-core') {
-                        el.innerHTML = `<option value="ALL">الإدارة العليا</option>` + branchesHtml;
-                    } else if (id === 'global-branch-filter' || id === 'log-filter-branch') {
-                        el.innerHTML = `<option value="ALL">-- الكل --</option>` + branchesHtml;
-                    } else {
-                        el.innerHTML = branchesHtml;
-                    }
-                    if (currentVal) el.value = currentVal;
-                }
-            });
-
-            // 2. تجهيز قائمة الرتب (هنا حل مشكلتك)
-            const ranksObj = systemSettingsCache.custom_ranks || {};
-            const ranksHtml = Object.keys(ranksObj).map(r => `<option value="${r}">${r}</option>`).join('');
-
-            // تحديث خانة "إدارة الصلاحيات" وخانة "تسجيل عضو جديد"
-            const rankSelectors = ['adm-rank-matrix-sel', 'reg-user-rank-sel-core'];
-            rankSelectors.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    const currentVal = el.value;
-                    el.innerHTML = (id === 'adm-rank-matrix-sel' ? `<option value="">-- اختر الرتبة --</option>` : '') + ranksHtml;
-                    if (currentVal) el.value = currentVal;
-                }
-            });
+    // أضفنا 'deleted-branch-filter' للقائمة ليتم تعبئته بالفروع
+    const branchSelectors = ['f-branch-master-sel', 'adm-whatsapp-br-sel', 'reg-user-branch-sel-core', 'global-branch-filter', 'log-filter-branch', 'deleted-branch-filter'];
+    
+    branchSelectors.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const currentVal = el.value;
+            if (id === 'reg-user-branch-sel-core') {
+                el.innerHTML = `<option value="ALL">الإدارة العليا</option>` + branchesHtml;
+            } else if (id === 'global-branch-filter' || id === 'log-filter-branch' || id === 'deleted-branch-filter') {
+                el.innerHTML = `<option value="ALL">-- جميع الفروع --</option>` + branchesHtml;
+            } else {
+                el.innerHTML = branchesHtml;
+            }
+            if (currentVal) el.value = currentVal;
         }
+    });
+
+    // 2. تجهيز قائمة الرتب
+    const ranksObj = systemSettingsCache.custom_ranks || {};
+    const ranksHtml = Object.keys(ranksObj).map(r => `<option value="${r}">${r}</option>`).join('');
+
+    const rankSelectors = ['adm-rank-matrix-sel', 'reg-user-rank-sel-core'];
+    rankSelectors.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const currentVal = el.value;
+            el.innerHTML = (id === 'adm-rank-matrix-sel' ? `<option value="">-- اختر الرتبة --</option>` : '') + ranksHtml;
+            if (currentVal) el.value = currentVal;
+        }
+    });
+}
+
+        
 
         // 1. دالة تحديث قائمة الفروع في السجل (تأكد من استدعائها في syncUiDropdownSelections)
         function updateLogBranchDropdown() {
@@ -4629,33 +4703,39 @@ if (currentUserSession.role === 'SUPER') {
         function closeSidebarControl() { document.getElementById('sidebar-complaint-arc-hub').classList.remove('open'); document.getElementById('master-dimmer').style.display = 'none'; }
         function toggleSidebar() { const n = document.getElementById('system-side-nav'), d = document.getElementById('master-dimmer'); n.classList.toggle('open'); d.style.display = n.classList.contains('open') ? 'block' : 'none'; }
         function closeAllMenus() { document.getElementById('system-side-nav').classList.remove('open'); closeSidebarControl(); }
-        function switchToAppModule(m) {
-            // إخفاء كل الموديولات
-            document.querySelectorAll('.nav-link-vip').forEach(b => b.classList.remove('active'));
-            document.getElementById('tab-' + m).classList.add('active');
-            ['live', 'daily', 'archive', 'reports', 'admin'].forEach(id => {
-                const mod = document.getElementById('module-view-' + id);
-                if (mod) mod.classList.add('hidden');
-            });
+       function switchToAppModule(m) {
+    // 1. تحديث شكل الأزرار في القائمة الجانبية
+    document.querySelectorAll('.nav-link-vip').forEach(b => b.classList.remove('active'));
+    const activeTab = document.getElementById('tab-' + m);
+    if (activeTab) activeTab.classList.add('active');
 
-            // إظهار الموديول المطلوب
-            const targetMod = document.getElementById('module-view-' + m);
-            if (targetMod) targetMod.classList.remove('hidden');
+    // 2. مصفوفة تضم كل الموديولات (يجب أن تشمل deleted الآن)
+    const allModules = ['live', 'daily', 'archive', 'reports', 'admin', 'deleted'];
+    
+    allModules.forEach(id => {
+        const mod = document.getElementById('module-view-' + id);
+        if (mod) mod.classList.add('hidden'); // إخفاء الكل
+    });
 
-            // تشغيل دوال التحديث الخاصة بكل صفحة
-            if (m === 'reports') executeAdvancedAnalyticsSequence();
-            if (m === 'daily') loadDailySnapshotData();
+    // 3. إظهار الموديول المطلوب فقط
+    const targetMod = document.getElementById('module-view-' + m);
+    if (targetMod) targetMod.classList.remove('hidden');
 
-            if (m === 'admin') {
-                // لو دخل صفحة الإدارة، لازم نشغل الدوال دي عشان الجداول تتملي
-                renderAdminBranchScrollBox();
-                renderAdminUsersScrollBox();
-                initPresenceMonitor(); // تشغيل الرادار
-                loadLogsFromFirebase(); // تحميل السجلات
-            }
+    // 4. تشغيل وظائف التحديث الخاصة بكل صفحة
+    if (m === 'reports') executeAdvancedAnalyticsSequence();
+    if (m === 'daily') loadDailySnapshotData();
+    if (m === 'deleted') renderDeletedComplaints(); // هذا السطر هو المسؤول عن جلب البيانات عند الضغط على الزر
+    if (m === 'archive') runArchiveRefreshSequence();
 
-            if (window.innerWidth <= 768) closeAllMenus();
-        }
+    if (m === 'admin') {
+        renderAdminBranchScrollBox();
+        renderAdminUsersScrollBox();
+        initPresenceMonitor();
+        loadLogsFromFirebase();
+    }
+
+    if (window.innerWidth <= 768) closeAllMenus();
+}
         function renderSystemToast(m, t) {
             const b = document.getElementById('system-toast-container'), toast = document.createElement('div');
             toast.className = 'toast-msg-vip'; if (t === 'danger') toast.style.background = '#ef4444';
@@ -5259,6 +5339,105 @@ async function showNoValueReport() {
     // 5. حقن الجدول في الحاوية المخصصة
     document.getElementById('matrix-report-table-container').innerHTML = tableHtml;
     renderSystemToast(`تم عرض ${grandTotalNoValue} بلاغ مستبعد بنجاح`, "info");
+}
+// دالة لجلب وعرض المحذوفات
+function renderDeletedComplaints() {
+    const box = document.getElementById('render-deleted-grid-hub');
+    if (!box) return;
+
+    // جلب قيم الفلاتر من الواجهة
+    const filterBranch = document.getElementById('deleted-branch-filter').value;
+    const filterFrom = document.getElementById('deleted-date-from').value;
+    const filterTo = document.getElementById('deleted-date-to').value;
+
+    box.innerHTML = `<h2 style="grid-column:1/-1;text-align:center;padding:50px;color:var(--text-muted-core);">جاري فحص سلة المحذوفات...</h2>`;
+
+    dbHub.ref('deleted_operations').once('value', snap => {
+        const deletedOps = snap.val() || {};
+        box.innerHTML = "";
+        
+        let keys = Object.keys(deletedOps).reverse();
+        let visibleCount = 0;
+
+        keys.forEach(id => {
+            const op = deletedOps[id];
+
+            // منطق الفلترة
+            // 1. فلتر الفرع
+            if (filterBranch !== 'ALL' && op.branch !== filterBranch) return;
+
+            // 2. فلتر التاريخ (من)
+            if (filterFrom && op.date < filterFrom) return;
+
+            // 3. فلتر التاريخ (إلى)
+            if (filterTo && op.date > filterTo) return;
+
+            // إذا مر البلاغ من كل الفلاتر، يتم عرضه
+            box.innerHTML += generateDeletedTicketMarkup(id, op);
+            visibleCount++;
+        });
+
+        if (visibleCount === 0) {
+            box.innerHTML = `<h2 style="grid-column:1/-1;text-align:center;padding:50px;color:var(--text-muted-core);">لا توجد شكاوى محذوفة تطابق هذا البحث</h2>`;
+        }
+    });
+}
+
+// تصميم كارت البلاغ المحذوف
+function generateDeletedTicketMarkup(id, op) {
+    return `
+        <div class="massive-glass-card ticket-visual-unit" style="border-right-color: #64748b; opacity: 0.8;">
+            <div style="display:flex; justify-content:space-between;">
+                <b>📍 ${op.branch}</b>
+                <span class="order-number-badge">#${op.order}</span>
+            </div>
+            <div style="margin:10px 0; font-size:0.9rem;">
+                <div>👤 العميل: ${op.customer}</div>
+                <div style="color:var(--danger-pulse);">⚠️ النوع: ${op.type}</div>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
+                <button class="btn-vip-execute-master" style="background:var(--success-glow); font-size:0.8rem;" 
+                    onclick="restoreTicket('${id}')">استعادة البلاغ</button>
+                <button class="btn-vip-execute-master" style="background:var(--danger-pulse); font-size:0.8rem;" 
+                    onclick="permanentlyDeleteTicket('${id}')">حذف نهائي</button>
+            </div>
+        </div>`;
+}
+
+// دالة استعادة البلاغ
+async function restoreTicket(id) {
+    const snap = await dbHub.ref('deleted_operations/' + id).once('value');
+    const op = snap.val();
+    if (op) {
+        op.status = 'active'; // إعادة الحالة لنشط
+        op.logs.push({
+            time: new Date().toLocaleTimeString('ar-EG'),
+            user: currentUserSession.name,
+            action: "تم استعادة البلاغ من المحذوفات"
+        });
+        await dbHub.ref('operations/' + id).set(op);
+        await dbHub.ref('deleted_operations/' + id).remove();
+        renderDeletedComplaints();
+        renderSystemToast("تم استعادة البلاغ للبث المباشر", "success");
+    }
+}
+
+// دالة الحذف النهائي
+async function permanentlyDeleteTicket(id) {
+    const confirm = await Swal.fire({
+        title: 'حذف نهائي؟',
+        text: 'هذا الإجراء سيقوم بمسح البلاغ من قاعدة البيانات تماماً ولا يمكن استعادته.',
+        icon: 'error',
+        showCancelButton: true,
+        confirmButtonText: 'نعم، احذف للأبد',
+        confirmButtonColor: '#000'
+    });
+
+    if (confirm.isConfirmed) {
+        await dbHub.ref('deleted_operations/' + id).remove();
+        renderDeletedComplaints();
+        renderSystemToast("تم الحذف النهائي بنجاح", "success");
+    }
 }
     </script>
 </body>

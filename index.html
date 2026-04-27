@@ -5036,9 +5036,18 @@ async function closeDayManually() {
         renderSystemToast("جاري أرشفة البيانات وتحديث التاريخ...", "warning");
 
         // 1. حساب التاريخ الجديد (اليوم التالي)
-        let d = new Date(systemOperationalDate);
-        d.setDate(d.getDate() + 1);
-        const nextDayStr = d.toISOString().split('T')[0];
+        // تقسيم التاريخ يدوياً لتجنب مشاكل المناطق الزمنية
+const [year, month, day] = systemOperationalDate.split('-').map(Number);
+const d = new Date(year, month - 1, day); 
+
+// إضافة يوم واحد
+d.setDate(d.getDate() + 1);
+
+// إعادة تحويله لنص بنفس التنسيق YYYY-MM-DD
+const y = d.getFullYear();
+const m = String(d.getMonth() + 1).padStart(2, '0');
+const dayStr = String(d.getDate()).padStart(2, '0');
+const nextDayStr = `${y}-${m}-${dayStr}`;
 
         try {
             // 2. تحديث التاريخ على السيرفر (Firebase)

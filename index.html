@@ -1861,6 +1861,55 @@ async function uploadImagesToImgBB() {
             border-radius: 12px;
             background: rgba(255,255,255,0.1);
         }
+        /* --- إعدادات الوضع النهاري --- */
+body.light-mode {
+    --primary-bg-core: #f0f2f5; /* خلفية فاتحة */
+    --glass-surface: rgba(255, 255, 255, 0.90); /* زجاج أبيض */
+    --text-pure: #1a1a1a; /* نص أسود */
+    --text-muted-core: #4b5563; /* نص رمادي غامق */
+    --border-glow-line: rgba(245, 158, 11, 0.4);
+    --shadow-depth: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* تصحيحات للعناصر التي تحتوي على خلفيات داكنة ثابتة */
+body.light-mode .massive-glass-card, 
+body.light-mode .ticket-visual-unit,
+body.light-mode .system-side-nav,
+body.light-mode .sidebar-complaint-master {
+    background: var(--glass-surface);
+    color: var(--text-pure);
+}
+
+body.light-mode input, 
+body.light-mode select, 
+body.light-mode textarea {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+    border: 1px solid #ddd;
+}
+
+body.light-mode .ticket-visual-unit {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+}
+
+body.light-mode .nav-link-vip:not(.active) {
+    color: #4b5563;
+}
+
+body.light-mode .nav-link-vip:hover {
+    background: rgba(245, 158, 11, 0.1);
+}
+
+body.light-mode h1, body.light-mode h2, body.light-mode h3 {
+    color: #0f172a !important;
+}
+
+/* تحسين شكل زر التبديل */
+.theme-switch-wrapper {
+    margin-bottom: 10px;
+    padding: 0 10px;
+}
     </style>
 </head>
 
@@ -1926,6 +1975,17 @@ async function uploadImagesToImgBB() {
             </div>
 
             <div class="nav-hub-menu">
+                <div class="nav-hub-menu">
+    <!-- زر تبديل الوضع (جديد) -->
+    <button class="nav-link-vip" onclick="toggleTheme()" style="background: rgba(245, 158, 11, 0.1); border: 1px dashed var(--gold-master);">
+        <i id="theme-icon" class="fas fa-sun"></i> 
+        <span id="theme-text">الوضع النهاري</span>
+    </button>
+    
+    <!-- باقي الأزرار الموجودة مسبقاً -->
+    <button class="nav-link-vip active" id="tab-live" onclick="switchToAppModule('live')"><i class="fas fa-satellite-dish"></i> البث المباشر</button>
+    ...
+</div>
                 <button class="nav-link-vip active" id="tab-live" onclick="switchToAppModule('live')"><i
                         class="fas fa-satellite-dish"></i> البث المباشر</button>
                 <button class="nav-link-vip" id="tab-daily" onclick="switchToAppModule('daily')"><i
@@ -5519,6 +5579,41 @@ async function permanentlyDeleteTicket(id) {
         renderDeletedComplaints();
         renderSystemToast("تم الحذف النهائي بنجاح", "success");
     }
+}
+// وظيفة تبديل الوضع (Dark/Light)
+function toggleTheme() {
+    const body = document.body;
+    const themeIcon = document.getElementById('theme-icon');
+    const themeText = document.getElementById('theme-text');
+
+    if (body.classList.contains('light-mode')) {
+        // التحويل للوضع الليلي
+        body.classList.remove('light-mode');
+        localStorage.setItem('theme', 'dark');
+        themeIcon.className = 'fas fa-sun';
+        themeText.innerText = 'الوضع النهاري';
+        renderSystemToast("تم تفعيل الوضع الليلي", "info");
+    } else {
+        // التحويل للوضع النهاري
+        body.classList.add('light-mode');
+        localStorage.setItem('theme', 'light');
+        themeIcon.className = 'fas fa-moon';
+        themeText.innerText = 'الوضع الليلي';
+        renderSystemToast("تم تفعيل الوضع النهاري", "info");
+    }
+}
+
+// كود إضافي يوضع داخل window.onload لضمان تذكر المتصفح للوضع المختار
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'light') {
+    document.body.classList.add('light-mode');
+    // تحديث الأيقونة والنص إذا كان الزر موجوداً
+    setTimeout(() => {
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+        if(themeIcon) themeIcon.className = 'fas fa-moon';
+        if(themeText) themeText.innerText = 'الوضع الليلي';
+    }, 100);
 }
     </script>
 </body>

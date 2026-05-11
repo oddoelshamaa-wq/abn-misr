@@ -2639,41 +2639,59 @@ function showLoginError(msg) {
             });
         }
 
-        window.onload = async () => {
-            const sess = localStorage.getItem('vip_v43_secure_token');
-            if (sess) {
-                currentUserSession = JSON.parse(sess);
-                
-                // 1. جلب تاريخ النظام من السيرفر أولاً قبل أي شيء
-                const dateSnap = await dbHub.ref('settings/system_date').get();
-                systemOperationalDate = dateSnap.val();
+    // --- دالة تشغيل النظام عند تحميل الصفحة ---
+window.onload = async () => {
+    const sess = localStorage.getItem('vip_v43_secure_token');
+    
+    if (sess) {
+        // 1. استعادة جلسة المستخدم
+        currentUserSession = JSON.parse(sess);
+        
+        // 2. جلب تاريخ النظام من السيرفر
+        const dateSnap = await dbHub.ref('settings/system_date').get();
+        systemOperationalDate = dateSnap.val();
 
-                // إذا لم يوجد تاريخ مخزن (أول مرة)، نضع تاريخ اليوم الفعلي
-                if (!systemOperationalDate) {
-                    systemOperationalDate = new Date().toISOString().split('T')[0];
-                    await dbHub.ref('settings/system_date').set(systemOperationalDate);
-                }
+        if (!systemOperationalDate) {
+            systemOperationalDate = new Date().toISOString().split('T')[0];
+            await dbHub.ref('settings/system_date').set(systemOperationalDate);
+        }
 
-                // 2. إظهار الواجهة
-                document.getElementById('auth-portal-mask').classList.add('hidden');
-                document.getElementById('main-system-viewport').classList.remove('hidden');
-                document.getElementById('ui-user-fullname').innerText = currentUserSession.name;
-                document.getElementById('ui-user-rank-label').innerText = currentUserSession.title;
-                document.getElementById('ui-avatar-orb').innerText = currentUserSession.name.charAt(0);
+        // 3. تحديث الواجهة والبيانات الأساسية
+        document.getElementById('auth-portal-mask').classList.add('hidden');
+        document.getElementById('main-system-viewport').classList.remove('hidden');
+        document.getElementById('ui-user-fullname').innerText = currentUserSession.name;
+        document.getElementById('ui-user-rank-label').innerText = currentUserSession.title;
+        document.getElementById('ui-avatar-orb').innerText = currentUserSession.name.charAt(0);
 
-                // 3. تهيئة الفلاتر والتواريخ بناءً على تاريخ النظام التشغيلي
-                setupSystemDates();
+        // 4. ضبط التواريخ والفلاتر
+        setupSystemDates();
 
-                // بقية الدوال العادية
-                branchListCache = JSON.parse(localStorage.getItem('branches') || '[]');
-                syncUiDropdownSelections();
-                runPermissionShieldCheck();
-                initCoreDataListeners(); 
-                
-                // استدعاء فحص الاشتراك في نهاية window.onload كما مطلوب
-                checkSubscriptionStatus();
-            }
-        };
+        // 🔥 5. تفعيل تتبع المستخدم (الرادار) فوراً
+        activateUserPresenceTracking(currentUserSession);
+
+        // 🔥 6. تشغيل مراقب الرادار خلف الكواليس لضمان تحديث الحالات
+        initPresenceMonitor();
+
+        // 7. تشغيل بقية المحركات
+        branchListCache = JSON.parse(localStorage.getItem('branches') || '[]');
+        syncUiDropdownSelections();
+        runPermissionShieldCheck();
+        initCoreDataListeners(); 
+        checkSubscriptionStatus();
+        
+        // تطبيق الوضع المختار (نهاري/ليلي)
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+            if(themeIcon) themeIcon.className = 'fas fa-moon';
+            if(themeText) themeText.innerText = 'الوضع الليلي';
+        }
+    }
+};
+
+ 
 
         async function initPresenceMonitor() {
             const radarFilter = document.getElementById('radar-branch-filter-select');
